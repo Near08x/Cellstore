@@ -1,0 +1,40 @@
+{
+  "placeholderImages": [
+    {
+      "id": "galaxy-s24",
+      "description": "A sleek, modern smartphone with a large vibrant display.",
+      "imageUrl": "https://images.unsplash.com/photo-1584006682522-dc17d6c0d9ac?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxzbWFydHBob25lJTIwZ2FsYXh5fGVufDB8fHx8MTc1ODk4NzU4N3ww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "smartphone galaxy"
+    },
+    {
+      "id": "iphone-15-pro",
+      "description": "The latest premium smartphone with a powerful camera system.",
+      "imageUrl": "https://images.unsplash.com/photo-1563456287-0e401cf5613e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw4fHxzbWFydHBob25lJTIwYXBwbGV8ZW58MHx8fHwxNzU5MDAyODg0fDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "smartphone apple"
+    },
+    {
+      "id": "pixel-8-pro",
+      "description": "Google's flagship phone with an exceptional camera and clean software.",
+      "imageUrl": "https://images.unsplash.com/photo-1602863414373-ef18f5f1ce3a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxzbWFydHBob25lJTIwZ29vZ2xlfGVufDB8fHx8MTc1OTAwMjg4NHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "smartphone google"
+    },
+    {
+      "id": "oneplus-12",
+      "description": "A performance-focused smartphone with fast charging technology.",
+      "imageUrl": "https://images.unsplash.com/photo-1600087626014-e652e18bbff2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw3fHxzbWFydHBob25lJTIwYW5kcm9pZHxlbnwwfHx8fDE3NTkwMDI4ODR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "smartphone android"
+    },
+    {
+      "id": "galaxy-z-fold",
+      "description": "A foldable smartphone that opens up into a small tablet.",
+      "imageUrl": "https://images.unsplash.com/photo-1568378711015-d10ec11f5c0c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw2fHxmb2xkYWJsZSUyMHBob25lfGVufDB8fHx8MTc1OTAwMjg4NHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "foldable phone"
+    },
+    {
+      "id": "iphone-se",
+      "description": "A compact and affordable smartphone with powerful internals.",
+      "imageUrl": "https://images.unsplash.com/photo-1587258314599-cb5b75d86a5e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwzfHxzbWFydHBob25lJTIwY29tcGFjdHxlbnwwfHx8fDE3NTkwMDI4ODR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "smartphone compact"
+    }
+  ]
+}
