@@ -34,21 +34,14 @@ import { useEffect, useState } from 'react';
 import { addDays, addMonths, addWeeks } from 'date-fns';
 
 const formSchema = z.object({
-  loanType: z.enum(['simple', 'amortization']),
   loanNumber: z.string().optional(),
-  customerEmail: z.string().min(1, 'Por favor, selecciona un cliente.'),
-  amount: z.coerce.number().positive('El monto debe ser positivo.'),
+  client_id: z.string().min(1, 'Por favor, selecciona un cliente.'),
+  principal: z.coerce.number().positive('El monto debe ser positivo.'),
   interestRate: z.coerce
     .number()
     .min(0, 'La tasa de interés no puede ser negativa.'),
-  loanTerm: z.coerce
-    .number()
-    .int()
-    .positive('El plazo debe ser un número entero positivo.'),
-  paymentType: z.enum(['mensual', 'quincenal', 'semanal', 'diario']),
-  loanDate: z.string(),
-  invoiceNumber: z.string().min(1, 'El número de factura es requerido.'),
-  cashier: z.string().default('Admin'),
+  startDate: z.string(),
+  dueDate: z.string().optional(),
 });
 
 type EditLoanFormProps = {
@@ -61,138 +54,49 @@ const calculateInstallments = (
   loanData: Partial<z.infer<typeof formSchema>>,
   existingInstallments: Installment[]
 ): Installment[] => {
-  const { amount, interestRate, loanTerm, paymentType, loanDate, loanType } =
-    loanData;
+  const { principal, interestRate, startDate, dueDate } = loanData;
 
-  if (
-    !amount ||
-    interestRate === undefined ||
-    !loanTerm ||
-    !paymentType ||
-    !loanDate
-  ) {
+  if (!principal || interestRate === undefined || !startDate) {
     return existingInstallments;
   }
 
   const installments: Installment[] = [];
-  const principal = amount;
-  const term = loanTerm;
-  const annualRate = interestRate / 100;
+  const total = principal + principal * (interestRate / 100);
 
-  let paymentFrequencyPerYear: number;
-  let addPeriod: (date: Date, count: number) => Date;
+  // ✅ En esta versión simplificamos: solo 1 cuota con total
+  const existing = existingInstallments[0];
+  installments.push({
+    id: existing?.id || `new-inst-1-${Date.now()}`,
+    installmentNumber: 1,
+    principal_amount: principal,
+    interest_amount: principal * (interestRate / 100),
+    paidAmount: existing?.paidAmount || 0,
+    status: existing?.status || 'Pendiente',
+    lateFee: existing?.lateFee || 0,
+    dueDate: dueDate || new Date(startDate).toISOString().split('T')[0],
+    paymentDate: existing?.paymentDate || undefined,
+  });
 
-  switch (paymentType) {
-    case 'mensual':
-      paymentFrequencyPerYear = 12;
-      addPeriod = addMonths;
-      break;
-    case 'quincenal':
-      paymentFrequencyPerYear = 24;
-      addPeriod = (date, count) => addWeeks(date, count * 2);
-      break;
-    case 'semanal':
-      paymentFrequencyPerYear = 52;
-      addPeriod = addWeeks;
-      break;
-    case 'diario':
-      paymentFrequencyPerYear = 365;
-      addPeriod = addDays;
-      break;
-    default:
-      return existingInstallments;
-  }
-
-  const ratePerPeriod = annualRate / paymentFrequencyPerYear;
-
-  if (loanType === 'amortization') {
-    const installmentAmount = (principal * ratePerPeriod * Math.pow(1 + ratePerPeriod, term)) / (Math.pow(1 + ratePerPeriod, term) - 1);
-    let remainingBalance = principal;
-
-    for (let i = 1; i <= term; i++) {
-      const interest = remainingBalance * ratePerPeriod;
-      const principalPayment = installmentAmount - interest;
-      remainingBalance -= principalPayment;
-
-      const dueDate: Date = addPeriod(new Date(loanDate), i);
-
-      const existing = existingInstallments.find(
-        (inst) => inst.installmentNumber === i
-      );
-
-      if (existing?.status === 'Pagado') {
-        installments.push(existing);
-        continue;
-      }
-      
-      installments.push({
-        id: existing?.id || `new-inst-${i}-${Date.now()}`,
-        installmentNumber: i,
-        principal_amount: principalPayment,
-        interest_amount: interest,
-        paidAmount: existing?.paidAmount || 0,
-        date: existing?.date || '',
-        status: existing?.status || 'Pendiente',
-        lateFee: existing?.lateFee || 0,
-        dueDate: dueDate.toISOString().split('T')[0],
-      });
-    }
-  } else {
-    // Simple Interest
-    const totalInterest = principal * (annualRate / 12) * (term * (paymentFrequencyPerYear/12));
-    const principalPerInstallment = principal / term;
-    const interestPerInstallment = totalInterest / term;
-
-    for (let i = 1; i <= term; i++) {
-      const dueDate: Date = addPeriod(new Date(loanDate), i);
-
-      const existing = existingInstallments.find(
-        (inst) => inst.installmentNumber === i
-      );
-
-      if (existing?.status === 'Pagado') {
-        installments.push(existing);
-        continue;
-      }
-
-      installments.push({
-        id: existing?.id || `new-inst-${i}-${Date.now()}`,
-        installmentNumber: i,
-        principal_amount: principalPerInstallment,
-        interest_amount: interestPerInstallment,
-        paidAmount: existing?.paidAmount || 0,
-        date: existing?.date || '',
-        status: existing?.status || 'Pendiente',
-        lateFee: existing?.lateFee || 0,
-        dueDate: dueDate.toISOString().split('T')[0],
-      });
-    }
-  }
   return installments;
 };
-
 export default function EditLoanForm({
   loan,
   clients,
   onUpdateLoan,
 }: EditLoanFormProps) {
   const [installments, setInstallments] = useState<Installment[]>(
-    loan.installments
+    loan.installments || []
   );
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      loanType: loan.loanType,
-      loanDate: loan.loanDate,
       loanNumber: loan.loanNumber,
-      customerEmail: loan.customerEmail,
-      amount: loan.amount,
+      client_id: loan.client_id,
+      principal: loan.principal,
       interestRate: loan.interestRate,
-      loanTerm: loan.loanTerm,
-      paymentType: loan.paymentType,
-      invoiceNumber: loan.invoiceNumber,
-      cashier: loan.cashier,
+      startDate: loan.startDate,
+      dueDate: loan.dueDate,
     },
   });
 
@@ -201,72 +105,55 @@ export default function EditLoanForm({
   useEffect(() => {
     const newInstallments = calculateInstallments(
       watchedValues,
-      loan.installments
+      loan.installments || []
     );
     setInstallments(newInstallments);
   }, [watchedValues, loan.installments]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    const finalInstallments = calculateInstallments(values, loan.installments);
+    const finalInstallments = calculateInstallments(
+      values,
+      loan.installments || []
+    );
+
     const amountToPay = finalInstallments.reduce(
       (acc, inst) => acc + inst.principal_amount + inst.interest_amount,
       0
     );
+
     const amountApplied = finalInstallments
       .filter((i) => i.status === 'Pagado' || i.status === 'Parcial')
-      .reduce((acc, inst) => acc + inst.paidAmount, 0);
+      .reduce((acc, inst) => acc + (i.paidAmount ?? 0), 0);
 
-    const client = clients.find(c => c.email === values.customerEmail);
+    const client = clients.find((c) => c.id === values.client_id);
 
     const updatedLoan: Loan = {
       ...loan,
       ...values,
+      client_id: values.client_id,
       customerName: client?.name || loan.customerName,
       installments: finalInstallments,
-      amountToPay: amountToPay,
-      amountApplied: amountApplied,
+      amountToPay,
+      amountApplied,
       totalPending: amountToPay - amountApplied,
     };
+
     onUpdateLoan(updatedLoan);
   };
-
   return (
     <Form {...form}>
       <form
         onSubmit={form.handleSubmit(onSubmit)}
         className="grid grid-cols-1 gap-8 md:grid-cols-3"
       >
+        {/* Columna izquierda: datos préstamo */}
         <div className="col-span-1 space-y-6">
           <h3 className="text-lg font-medium">Detalles del Préstamo</h3>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="loanType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Préstamo</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccione un tipo" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="simple">Simple</SelectItem>
-                        <SelectItem value="amortization">Amortización</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="customerEmail"
+                name="client_id"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
@@ -281,7 +168,7 @@ export default function EditLoanForm({
                       </FormControl>
                       <SelectContent>
                         {clients.map((client) => (
-                          <SelectItem key={client.email} value={client.email}>
+                          <SelectItem key={client.id} value={client.id}>
                             {client.name}
                           </SelectItem>
                         ))}
@@ -291,105 +178,6 @@ export default function EditLoanForm({
                   </FormItem>
                 )}
               />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Monto</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="5000.00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="interestRate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tasa Interés (Anual %)</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="12" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="loanTerm"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plazo del Préstamo</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="12" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="paymentType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Frecuencia de Pago</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Frecuencia" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="diario">Diario</SelectItem>
-                        <SelectItem value="semanal">Semanal</SelectItem>
-                        <SelectItem value="quincenal">Quincenal</SelectItem>
-                        <SelectItem value="mensual">Mensual</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="invoiceNumber"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>No. Factura</FormLabel>
-                    <FormControl>
-                      <Input placeholder="INV00X" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="loanDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fecha del Préstamo</FormLabel>
-                    <FormControl>
-                      <Input type="date" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="loanNumber"
@@ -403,14 +191,58 @@ export default function EditLoanForm({
                   </FormItem>
                 )}
               />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="principal"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Monto (Capital)</FormLabel>
+                  <FormControl>
+                    <Input type="number" placeholder="5000.00" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="interestRate"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tasa Interés (%)</FormLabel>
+                  <FormControl>
+                    <Input type="number" placeholder="12" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
-                name="cashier"
+                name="startDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Cajero</FormLabel>
+                    <FormLabel>Fecha Inicio</FormLabel>
                     <FormControl>
-                      <Input disabled {...field} />
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Fecha Límite</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -422,6 +254,8 @@ export default function EditLoanForm({
             Actualizar Préstamo
           </Button>
         </div>
+
+        {/* Columna derecha: cuotas */}
         <div className="col-span-1 md:col-span-2 space-y-4">
           <h3 className="text-lg font-medium">Cuotas y Resumen de Pago</h3>
           <div className="rounded-md border h-64 overflow-y-auto">
@@ -444,7 +278,7 @@ export default function EditLoanForm({
                       <TableCell>{inst.dueDate}</TableCell>
                       <TableCell>${inst.principal_amount.toFixed(2)}</TableCell>
                       <TableCell>${inst.interest_amount.toFixed(2)}</TableCell>
-                      <TableCell>${inst.lateFee.toFixed(2)}</TableCell>
+                      <TableCell>${(inst.lateFee ?? 0).toFixed(2)}</TableCell>
                       <TableCell>
                         <Badge
                           variant={
@@ -452,8 +286,6 @@ export default function EditLoanForm({
                               ? 'secondary'
                               : inst.status === 'Atrasado'
                               ? 'destructive'
-                              : inst.status === 'Parcial'
-                              ? 'outline'
                               : 'outline'
                           }
                         >
@@ -475,40 +307,44 @@ export default function EditLoanForm({
               </TableBody>
             </Table>
           </div>
+
           <Separator />
+
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Monto a Pagar</p>
               <p className="text-lg font-medium">
-                ${loan.amountToPay.toFixed(2)}
+                ${(loan.amountToPay ?? 0).toFixed(2)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Monto Aplicado</p>
               <p className="text-lg font-medium">
-                ${loan.amountApplied.toFixed(2)}
+                ${(loan.amountApplied ?? 0).toFixed(2)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Monto Atrasado</p>
               <p className="text-lg font-medium text-destructive">
-                ${loan.overdueAmount.toFixed(2)}
+                ${(loan.overdueAmount ?? 0).toFixed(2)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Mora</p>
               <p className="text-lg font-medium text-destructive">
-                ${loan.lateFee.toFixed(2)}
+                ${(loan.lateFee ?? 0).toFixed(2)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Devuelta</p>
-              <p className="text-lg font-medium">${loan.change.toFixed(2)}</p>
+              <p className="text-lg font-medium">
+                ${(loan.change ?? 0).toFixed(2)}
+              </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Total Pendiente</p>
               <p className="text-2xl font-bold text-primary">
-                ${loan.totalPending.toFixed(2)}
+                ${(loan.totalPending ?? 0).toFixed(2)}
               </p>
             </div>
           </div>
@@ -517,6 +353,3 @@ export default function EditLoanForm({
     </Form>
   );
 }
-
-    
-    

@@ -28,7 +28,7 @@ export type Sale = {
 };
 
 export type Client = {
-  id?: string;
+  id: string;       // ✅ obligatorio, porque Supabase siempre devuelve un id
   name: string;
   email: string;
   phone: string;
@@ -40,32 +40,46 @@ export type Installment = {
   principal_amount: number;
   interest_amount: number;
   paidAmount: number;
-  date: string;
-  status: 'Pagado' | 'Pendiente' | 'Atrasado' | 'Parcial';
   lateFee: number;
   dueDate: string;
+  paymentDate?: string;   // ✅ opcional para cuando ya se pagó
+  status: 'Pagado' | 'Pendiente' | 'Atrasado' | 'Parcial';
 };
+
+export type LoanStatus = 'Pendiente' | 'Aprobado' | 'Pagado' | 'Cancelado';
 
 export type Loan = {
   id: string;
   loanNumber: string;
-  paymentType: 'mensual' | 'quincenal' | 'semanal' | 'diario';
-  invoiceNumber: string;
-  loanDate: string;
-  customerName: string;
-  customerEmail: string;
-  amount: number;
+
+  // Fechas
+  loanDate: string;     // fecha de creación del préstamo
+  startDate?: string;   // ✅ fecha de inicio real del préstamo
+  dueDate?: string;     // ✅ fecha límite final del préstamo
+
+  // Relación con cliente
+  client_id: string | null;   // viene de client_id en la tabla loans
+  customerName: string;        // se muestra en UI
+
+  // Datos financieros
+  principal: number;
   interestRate: number;
-  loanTerm: number;
-  loanType: 'simple' | 'amortization';
-  cashier: string;
+  amount: number;
   amountToPay: number;
   amountApplied: number;
   overdueAmount: number;
   lateFee: number;
-  change: number;
+  change?: number;
   totalPending: number;
+
+  // Cuotas
   installments: Installment[];
+
+  // ✅ Nuevos campos para resolver errores
+  loanType?: string;             // tipo de préstamo (ej. "Quincenal", "Mensual")
+  invoiceNumber?: string;        // número de factura asociado
+  cashier?: string;              // cajero que registró el préstamo
+  status?: LoanStatus;           // estado actual del préstamo
 };
 
 export type Role = 'admin' | 'cashier';

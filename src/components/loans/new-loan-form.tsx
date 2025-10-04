@@ -32,6 +32,7 @@ import type { Client, Loan, Installment } from '@/lib/types';
 import { Separator } from '../ui/separator';
 import { useEffect, useState } from 'react';
 import { addMonths, addWeeks, addDays } from 'date-fns';
+import { toast } from "react-hot-toast";
 
 const formSchema = z.object({
   loanType: z.enum(['simple', 'amortization']),
@@ -120,7 +121,7 @@ const calculateInstallments = (
         principal_amount: principalPayment,
         interest_amount: interest,
         paidAmount: 0,
-        date: '',
+        paymentDate: undefined,
         status: 'Pendiente',
         lateFee: 0,
         dueDate: dueDate.toISOString().split('T')[0],
@@ -140,7 +141,7 @@ const calculateInstallments = (
         principal_amount: principalPerInstallment,
         interest_amount: interestPerInstallment,
         paidAmount: 0,
-        date: '',
+       paymentDate: undefined,
         status: 'Pendiente',
         lateFee: 0,
         dueDate: dueDate.toISOString().split('T')[0],
@@ -181,29 +182,52 @@ export default function NewLoanForm({
   }, [watchedValues]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    const finalInstallments = calculateInstallments(values).map((inst) => ({...inst, id: `new-inst-${inst.installmentNumber}-${Date.now()}`}));
-    const amountToPay = finalInstallments.reduce(
-      (acc, inst) => acc + inst.principal_amount + inst.interest_amount,
-      0
-    );
+  const finalInstallments = calculateInstallments(values).map((inst) => ({
+    ...inst,
+    id: `new-inst-${inst.installmentNumber}-${Date.now()}`
+  }));
 
-    const client = clients.find(c => c.email === values.customerEmail);
+  const amountToPay = finalInstallments.reduce(
+    (acc, inst) => acc + inst.principal_amount + inst.interest_amount,
+    0
+  );
 
-    const newLoan: Omit<Loan, 'id'> = {
-      ...values,
-      customerName: client?.name || '',
-      loanNumber: nextLoanNumber,
-      amountToPay: amountToPay,
-      amountApplied: 0,
-      overdueAmount: 0,
-      lateFee: 0,
-      change: 0,
-      totalPending: amountToPay,
-      installments: finalInstallments,
-    };
-    onAddLoan(newLoan);
-    form.reset();
+  const client = clients.find((c) => c.email === values.customerEmail);
+
+  if (!client) {
+    toast({
+      title: "Error",
+      description: "Debe seleccionar un cliente válido.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  const newLoan: Omit<Loan, "id"> = {
+    client_id: client.id,        // ✅ requerido por Loan
+    customerName: client.name,    // ✅ mostrado en UI
+    loanNumber: nextLoanNumber,
+    principal: values.amount,     // ✅ requerido por Loan
+    interestRate: values.interestRate,
+    amount: values.amount,
+    amountToPay,
+    amountApplied: 0,
+    overdueAmount: 0,
+    lateFee: 0,
+    change: 0,
+    totalPending: amountToPay,
+    startDate: values.loanDate,
+    dueDate: "", // opcional: puedes calcular fecha global de vencimiento
+    status: "Pendiente",
+    installments: finalInstallments,
+    cashier: values.cashier,
+    loanDate: new Date().toISOString(),
   };
+
+  onAddLoan(newLoan);
+  form.reset();
+};
+
 
   const totalToPay = installments.reduce(
     (acc, inst) => acc + inst.principal_amount + inst.interest_amount,

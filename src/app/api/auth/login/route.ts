@@ -1,78 +1,61 @@
 'use server'
-import type { User } from '@supabase/supabase-js';
+
 import { NextResponse } from 'next/server'
-import { supabaseAdmin, supabase } from '@/lib/supabaseServer'
-
-// Crear usuario admin inicial si no existe
-async function createInitialAdminUser() {
-  const email = 'near9708@gmail.com'
-  const password = 'robert1997'
-  const name = 'Admin Near'
-  const role = 'admin'
-
-  // Verificar si ya existe
-  const { data: userList, error: listError } =
-    await supabaseAdmin.auth.admin.listUsers()
-
-  if (listError) throw listError
-
-  const exists = userList?.users?.some((u: User) => u.email === email)
-
-  if (!exists) {
-    const { data: createdUser, error } =
-      await supabaseAdmin.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { name, role },
-      })
-
-    if (error) throw error
-    console.log('✅ Usuario admin creado:', createdUser?.user?.email)
-  }
-}
+import { supabase } from '@/lib/supabaseServer'
+import bcrypt from 'bcryptjs'
 
 export async function POST(request: Request) {
   try {
-    // Crear admin inicial si no existe
-    await createInitialAdminUser()
-
-    const { email, password } = (await request.json()) as {
-      email: string
-      password: string
-    }
+    const { email, password } = await request.json()
 
     if (!email || !password) {
       return NextResponse.json(
-        { message: 'Email y contraseña son requeridos' },
+        { message: 'Correo y contraseña son requeridos.' },
         { status: 400 }
       )
     }
 
-    // Login con Supabase
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    // Buscar usuario en profiles
+    const { data: user, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('email', email)
+      .single()
 
-    if (error || !data?.user) {
+    if (error || !user) {
       return NextResponse.json(
-        { message: 'Credenciales inválidas' },
+        { message: 'Usuario no encontrado.' },
         { status: 401 }
       )
     }
 
-    // Retornar datos del usuario sin exponer nada sensible
-    return NextResponse.json({
-      id: data.user.id,
-      email: data.user.email,
-      name: data.user.user_metadata?.name as string | undefined,
-      role: data.user.user_metadata?.role as string | undefined,
-    })
+    // Comparar contraseñas
+    const isValid = await bcrypt.compare(password, user.password_hash)
+    if (!isValid) {
+      return NextResponse.json(
+        { message: 'Contraseña incorrecta.' },
+        { status: 401 }
+      )
+    }
+
+    // Retornar usuario sin exponer el hash
+    const safeUser = {
+      id: user.id,
+      user_id: user.user_id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      created_at: user.created_at,
+    }
+
+    console.log('✅ Usuario autenticado:', safeUser.email)
+
+    // Puedes guardar sesión con cookie o en client-side
+    return NextResponse.json({ user: safeUser })
   } catch (error) {
-    console.error('Login error:', error)
+    console.error('Error en login:', error)
     return NextResponse.json(
-      { message: 'Error interno del servidor' },
+      { message: 'Error interno en el login.' },
       { status: 500 }
     )
   }
