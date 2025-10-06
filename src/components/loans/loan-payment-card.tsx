@@ -4,6 +4,8 @@ import React, { useRef, useEffect } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import type { Loan } from '@/lib/types';
 
+
+
 const LoanPaymentCard = React.forwardRef<HTMLDivElement, { loan: Loan }>(
   ({ loan }, ref) => {
     return (
@@ -19,7 +21,7 @@ const LoanPaymentCard = React.forwardRef<HTMLDivElement, { loan: Loan }>(
         </div>
 
         {/* Datos */}
-        <p><strong>Cliente:</strong> {loan.customerName}</p>
+        <p><strong>Cliente:</strong> {loan.client_name}</p>
         <p><strong>No. Préstamo:</strong> {loan.loanNumber}</p>
         <p><strong>Monto:</strong> ${loan.amount.toFixed(2)}</p>
         <p><strong>Total a Pagar:</strong> ${loan.amountToPay.toFixed(2)}</p>

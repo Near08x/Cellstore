@@ -4,42 +4,26 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
+  Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { Client, Loan, Installment } from '@/lib/types';
 import { Separator } from '../ui/separator';
 import { useEffect, useState } from 'react';
-import { addDays, addMonths, addWeeks } from 'date-fns';
+import { format } from 'date-fns'; // ✅ FIXED
 
 const formSchema = z.object({
   loanNumber: z.string().optional(),
   client_id: z.string().min(1, 'Por favor, selecciona un cliente.'),
   principal: z.coerce.number().positive('El monto debe ser positivo.'),
-  interestRate: z.coerce
-    .number()
-    .min(0, 'La tasa de interés no puede ser negativa.'),
+  interestRate: z.coerce.number().min(0, 'La tasa de interés no puede ser negativa.'),
   startDate: z.string(),
   dueDate: z.string().optional(),
 });
@@ -49,6 +33,9 @@ type EditLoanFormProps = {
   clients: Client[];
   onUpdateLoan: (loan: Loan) => void;
 };
+
+// ✅ FIXED helper
+const toYYYYMMDD = (d: Date) => format(d, 'yyyy-MM-dd');
 
 const calculateInstallments = (
   loanData: Partial<z.infer<typeof formSchema>>,
@@ -60,33 +47,27 @@ const calculateInstallments = (
     return existingInstallments;
   }
 
-  const installments: Installment[] = [];
-  const total = principal + principal * (interestRate / 100);
-
-  // ✅ En esta versión simplificamos: solo 1 cuota con total
+  const totalInterest = principal * (interestRate / 100);
   const existing = existingInstallments[0];
-  installments.push({
-    id: existing?.id || `new-inst-1-${Date.now()}`,
-    installmentNumber: 1,
-    principal_amount: principal,
-    interest_amount: principal * (interestRate / 100),
-    paidAmount: existing?.paidAmount || 0,
-    status: existing?.status || 'Pendiente',
-    lateFee: existing?.lateFee || 0,
-    dueDate: dueDate || new Date(startDate).toISOString().split('T')[0],
-    paymentDate: existing?.paymentDate || undefined,
-  });
 
-  return installments;
+  return [
+    {
+      id: existing?.id || `new-inst-1-${Date.now()}`,
+      installmentNumber: 1,
+      principal_amount: principal,
+      interest_amount: totalInterest,
+      paidAmount: existing?.paidAmount || 0,
+      status: existing?.status || 'Pendiente',
+      lateFee: existing?.lateFee || 0,
+      // ✅ FIXED: si no hay dueDate, usar startDate (local)
+      dueDate: dueDate || toYYYYMMDD(new Date(startDate)),
+      paymentDate: existing?.paymentDate || undefined,
+    },
+  ];
 };
-export default function EditLoanForm({
-  loan,
-  clients,
-  onUpdateLoan,
-}: EditLoanFormProps) {
-  const [installments, setInstallments] = useState<Installment[]>(
-    loan.installments || []
-  );
+
+export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFormProps) {
+  const [installments, setInstallments] = useState<Installment>([] as any);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -95,35 +76,27 @@ export default function EditLoanForm({
       client_id: loan.client_id,
       principal: loan.principal,
       interestRate: loan.interestRate,
-      startDate: loan.startDate,
-      dueDate: loan.dueDate,
+      startDate: loan.startDate, // ya viene "YYYY-MM-DD"
+      dueDate: loan.dueDate || '',
     },
   });
 
   const watchedValues = useWatch({ control: form.control });
 
   useEffect(() => {
-    const newInstallments = calculateInstallments(
-      watchedValues,
-      loan.installments || []
-    );
+    const newInstallments = calculateInstallments(watchedValues, loan.installments || []);
     setInstallments(newInstallments);
   }, [watchedValues, loan.installments]);
 
   const onSubmit = (values: z.infer<typeof formSchema>) => {
-    const finalInstallments = calculateInstallments(
-      values,
-      loan.installments || []
-    );
-
+    const finalInstallments = calculateInstallments(values, loan.installments || []);
     const amountToPay = finalInstallments.reduce(
       (acc, inst) => acc + inst.principal_amount + inst.interest_amount,
       0
     );
-
     const amountApplied = finalInstallments
       .filter((i) => i.status === 'Pagado' || i.status === 'Parcial')
-      .reduce((acc, inst) => acc + (i.paidAmount ?? 0), 0);
+      .reduce((acc, i) => acc + (i.paidAmount ?? 0), 0);
 
     const client = clients.find((c) => c.id === values.client_id);
 
@@ -140,13 +113,10 @@ export default function EditLoanForm({
 
     onUpdateLoan(updatedLoan);
   };
+
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(onSubmit)}
-        className="grid grid-cols-1 gap-8 md:grid-cols-3"
-      >
-        {/* Columna izquierda: datos préstamo */}
+      <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 gap-8 md:grid-cols-3">
         <div className="col-span-1 space-y-6">
           <h3 className="text-lg font-medium">Detalles del Préstamo</h3>
           <div className="space-y-4">
@@ -157,10 +127,7 @@ export default function EditLoanForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Cliente</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Seleccione un cliente" />
@@ -255,7 +222,6 @@ export default function EditLoanForm({
           </Button>
         </div>
 
-        {/* Columna derecha: cuotas */}
         <div className="col-span-1 md:col-span-2 space-y-4">
           <h3 className="text-lg font-medium">Cuotas y Resumen de Pago</h3>
           <div className="rounded-md border h-64 overflow-y-auto">
@@ -271,11 +237,20 @@ export default function EditLoanForm({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {installments.length > 0 ? (
+                {Array.isArray(installments) && installments.length > 0 ? (
                   installments.map((inst) => (
                     <TableRow key={inst.id}>
                       <TableCell>{inst.installmentNumber}</TableCell>
-                      <TableCell>{inst.dueDate}</TableCell>
+                      <TableCell>
+                        {/* ✅ FIXED: mostrar local */}
+                        {inst.dueDate
+                          ? new Date(inst.dueDate).toLocaleDateString('es-DO', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                            })
+                          : '—'}
+                      </TableCell>
                       <TableCell>${inst.principal_amount.toFixed(2)}</TableCell>
                       <TableCell>${inst.interest_amount.toFixed(2)}</TableCell>
                       <TableCell>${(inst.lateFee ?? 0).toFixed(2)}</TableCell>
@@ -296,10 +271,7 @@ export default function EditLoanForm({
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell
-                      colSpan={6}
-                      className="text-center text-muted-foreground h-32"
-                    >
+                    <TableCell colSpan={6} className="text-center text-muted-foreground h-32">
                       Ajusta los detalles para generar las cuotas.
                     </TableCell>
                   </TableRow>
@@ -313,39 +285,27 @@ export default function EditLoanForm({
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Monto a Pagar</p>
-              <p className="text-lg font-medium">
-                ${(loan.amountToPay ?? 0).toFixed(2)}
-              </p>
+              <p className="text-lg font-medium">${(loan.amountToPay ?? 0).toFixed(2)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Monto Aplicado</p>
-              <p className="text-lg font-medium">
-                ${(loan.amountApplied ?? 0).toFixed(2)}
-              </p>
+              <p className="text-lg font-medium">${(loan.amountApplied ?? 0).toFixed(2)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Monto Atrasado</p>
-              <p className="text-lg font-medium text-destructive">
-                ${(loan.overdueAmount ?? 0).toFixed(2)}
-              </p>
+              <p className="text-lg font-medium text-destructive">${(loan.overdueAmount ?? 0).toFixed(2)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Mora</p>
-              <p className="text-lg font-medium text-destructive">
-                ${(loan.lateFee ?? 0).toFixed(2)}
-              </p>
+              <p className="text-lg font-medium text-destructive">${(loan.lateFee ?? 0).toFixed(2)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Devuelta</p>
-              <p className="text-lg font-medium">
-                ${(loan.change ?? 0).toFixed(2)}
-              </p>
+              <p className="text-lg font-medium">${(loan.change ?? 0).toFixed(2)}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Total Pendiente</p>
-              <p className="text-2xl font-bold text-primary">
-                ${(loan.totalPending ?? 0).toFixed(2)}
-              </p>
+              <p className="text-2xl font-bold text-primary">${(loan.totalPending ?? 0).toFixed(2)}</p>
             </div>
           </div>
         </div>

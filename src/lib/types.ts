@@ -1,3 +1,6 @@
+// =========================
+// 📦 PRODUCTOS
+// =========================
 export type Product = {
   id: string;
   name: string;
@@ -10,6 +13,9 @@ export type Product = {
   stock: number;
 };
 
+// =========================
+// 🧾 DETALLES DE VENTA
+// =========================
 export type SaleDetail = {
   productId: string;
   quantity: number;
@@ -18,6 +24,9 @@ export type SaleDetail = {
   price: number;
 };
 
+// =========================
+// 💰 VENTAS
+// =========================
 export type Sale = {
   id: string;
   customerName: string;
@@ -27,62 +36,84 @@ export type Sale = {
   items: SaleDetail[];
 };
 
+// =========================
+// 👤 CLIENTES
+// =========================
 export type Client = {
-  id: string;       // ✅ obligatorio, porque Supabase siempre devuelve un id
+  id: string;       // UUID generado por Supabase
   name: string;
   email: string;
   phone: string;
+  loans?: Loan[];   // Relación 1:N con préstamos
 };
+
+// =========================
+// 🧮 CUOTAS (loan_installments)
+// =========================
+export type InstallmentStatus =
+  | 'Pendiente'
+  | 'Pagado'
+  | 'Parcial'
+  | 'Atrasado';
 
 export type Installment = {
-  id: string;
-  installmentNumber: number;
-  principal_amount: number;
-  interest_amount: number;
-  paidAmount: number;
-  lateFee: number;
-  dueDate: string;
-  paymentDate?: string;   // ✅ opcional para cuando ya se pagó
-  status: 'Pagado' | 'Pendiente' | 'Atrasado' | 'Parcial';
+  id: number;                     // SERIAL
+  loan_id?: string;               // FK a loans.id
+  installmentNumber: number;      // corresponde a installment_number
+  dueDate: string;                // due_date (fecha límite)
+  principal_amount: number;       // principal_amount
+  interest_amount: number;        // interest_amount
+  paidAmount: number;             // paid_amount
+  lateFee: number;                // late_fee
+  status: InstallmentStatus;      // estado de la cuota
+  paymentDate?: string | null;    // payment_date opcional
 };
 
-export type LoanStatus = 'Pendiente' | 'Aprobado' | 'Pagado' | 'Cancelado';
+// =========================
+// 💳 PRÉSTAMOS (loans)
+// =========================
+export type LoanStatus =
+  | 'Pendiente'
+  | 'Aprobado'
+  | 'Pagado'
+  | 'Cancelado';
 
 export type Loan = {
-  id: string;
-  loanNumber: string;
+  id: string;                     // uuid
+  loanNumber: string;             // loan_number
+  client_id: string | null;       // FK a clients.id
+  client_name?: string;           // nombre del cliente para UI
 
   // Fechas
-  loanDate: string;     // fecha de creación del préstamo
-  startDate?: string;   // ✅ fecha de inicio real del préstamo
-  dueDate?: string;     // ✅ fecha límite final del préstamo
-
-  // Relación con cliente
-  client_id: string | null;   // viene de client_id en la tabla loans
-  customerName: string;        // se muestra en UI
+  loanDate: string;               // fecha de creación del préstamo
+  startDate?: string;             // start_date (inicio real)
+  dueDate: string | null;         // due_date (fecha final del préstamo)
 
   // Datos financieros
   principal: number;
-  interestRate: number;
-  amount: number;
-  amountToPay: number;
-  amountApplied: number;
-  overdueAmount: number;
-  lateFee: number;
-  change?: number;
-  totalPending: number;
+  interestRate: number;           // interest_rate (anual %)
+  amount: number;                 // monto solicitado
+  amountToPay: number;            // total a pagar
+  amountApplied: number;          // total abonado
+  overdueAmount: number;          // monto vencido
+  lateFee: number;                // mora acumulada
+  change?: number;                // cambio devuelto
+  totalPending: number;           // saldo total pendiente
 
   // Cuotas
   installments: Installment[];
 
-  // ✅ Nuevos campos para resolver errores
-  loanType?: string;             // tipo de préstamo (ej. "Quincenal", "Mensual")
-  invoiceNumber?: string;        // número de factura asociado
-  cashier?: string;              // cajero que registró el préstamo
-  status?: LoanStatus;           // estado actual del préstamo
+  // Extras para interfaz
+  loanType?: string;              // tipo (Mensual, Quincenal...)
+  invoiceNumber?: string;         // factura asociada
+  cashier?: string;               // cajero
+  status?: LoanStatus;            // estado del préstamo
 };
 
-export type Role = 'admin' | 'cashier';
+// =========================
+// 👥 ROLES Y USUARIOS
+// =========================
+export type Role = 'admin' | 'cashier' | 'employee' | 'user';
 
 export type User = {
   id: string;

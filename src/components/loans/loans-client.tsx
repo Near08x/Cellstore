@@ -64,15 +64,18 @@ import {
 import { Badge } from '../ui/badge';
 import LoanPaymentCardWithPrint from './loan-payment-card';
 import PaymentReceiptWithPrint from './payment-receipt';
-import { isPast, parseISO } from 'date-fns';
+// ✅ FIXED: eliminar parseISO y usar formato local seguro
+import { isPast } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { Label } from '../ui/label';
 import { RadioGroup, RadioGroupItem } from '../ui/radio-group';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
 import { useToast } from '@/hooks/use-toast';
+import PayLoanModal from './pay-loan-modal';
 
 type PaymentMethod = 'cash' | 'transfer' | 'card' | 'mixed';
+const [refreshTrigger, setRefreshTrigger] = useState(0);
 
 export default function LoansClient({
   loans: initialLoans,
@@ -116,13 +119,17 @@ export default function LoansClient({
   const receiptRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   
-
-  // ✅ Unificar carga: loans + clients desde /api/loans
+  // ✅ FIXED: fetch estándar sin NEXT_PUBLIC_API_URL (usa rutas internas)
   useEffect(() => {
-    const fetchLoansAndClients = async () => {
-      try {
-        const res = await fetch('/api/loans', { cache: 'no-store' });
-        const data = await res.json();
+  const fetchLoansAndClients = async () => {
+    try {
+      const baseUrl =
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
+
+      const res = await fetch(`${baseUrl}/api/loans`, { cache: 'no-store' });
+      const data = await res.json();
 
         if (res.ok) {
           setLoans(Array.isArray(data?.loans) ? data.loans : []);
@@ -148,12 +155,10 @@ export default function LoansClient({
       }
     };
 
-    // Solo si vienen vacíos desde SSR, recargar del API
     if (!initialLoans?.length || !initialClients?.length) {
       fetchLoansAndClients();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrint = () => {
     window.print();
@@ -192,29 +197,64 @@ export default function LoansClient({
   );
   const availableCapital = totalCapital - lentCapital;
 
-  // 🔹 Crear préstamo
-  // 🔹 Crear préstamo
+// 🔹 Crear préstamo (con refresco y apertura automática)
 const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
   try {
-    // 👇 Ya no usamos customerId, porque Loan ahora tiene client_id
     const res = await fetch('/api/loans', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newLoanData), // newLoanData ya contiene client_id
+      body: JSON.stringify(newLoanData),
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.message || data.error || 'Error creando préstamo');
+    if (!res.ok)
+      throw new Error(data.message || data.error || 'Error creando préstamo');
 
-    // ✅ El POST devuelve el préstamo normalizado directamente
+    // ✅ 1. Agregar el nuevo préstamo al estado global
     setLoans((prev) => [data, ...prev]);
-    setNewLoanOpen(false);
-    setLoanForCard(data);
 
+    // ✅ 2. Si pertenece al cliente seleccionado, refresca su lista
+    if (selectedClient && data.clientId === selectedClient.id) {
+      const baseUrl =
+        typeof window !== 'undefined'
+          ? window.location.origin
+          : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
+
+      const resLoans = await fetch(`${baseUrl}/api/loans`, { cache: 'no-store' });
+      const jsonLoans = await resLoans.json();
+
+      if (resLoans.ok && Array.isArray(jsonLoans?.loans)) {
+        const filtered = jsonLoans.loans.filter(
+          (loan: Loan) => loan.client_id === selectedClient.id
+        );
+        setClientLoans(filtered);
+
+        // 🔄 Forzar re-render del cliente actual
+        setSelectedClient({
+          ...selectedClient,
+          lastUpdatedAt: Date.now(),
+        } as Client);
+      }
+    }
+
+    // ✅ 3. Cerrar modal
+    setNewLoanOpen(false);
+
+    // ✅ 4. Mostrar toast confirmando
     toast({
       title: 'Éxito',
-      description: 'Préstamo añadido correctamente.',
+      description: `Préstamo ${data.loanNumber} añadido correctamente.`,
     });
+
+    // ✅ 5. Esperar un poco y abrir automáticamente el préstamo recién creado
+    setTimeout(() => {
+      const element = document.querySelector(`[data-state][value="${data.id}"]`);
+      if (element) {
+        (element as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const trigger = element.querySelector('button');
+        if (trigger) trigger.click();
+      }
+    }, 600);
   } catch (error) {
     console.error('❌ Error en handleAddLoan:', error);
     toast({
@@ -227,90 +267,92 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
 
 
-// 🔹 Preparar edición
+
+// 🔹 Preparar edición de préstamo
 const handleEditLoan = (loan: Loan) => {
   setEditingLoan(loan);
 };
 
-// 🔹 Actualizar préstamo
-const handleUpdateLoan = async (updatedLoanData: Loan) => {
-  try {
-    const res = await fetch('/api/loans', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatedLoanData),
-    });
+  // 🔹 Actualizar préstamo
+  const handleUpdateLoan = async (updatedLoanData: Loan) => {
+    try {
+      const res = await fetch('/api/loans', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedLoanData),
+      });
 
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || data.error || 'Error actualizando préstamo');
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.message || data.error || 'Error actualizando préstamo');
 
-    setLoans((prev) =>
-      prev.map((l) => (l.id === updatedLoanData.id ? data : l))
-    );
-    setEditingLoan(null);
+      setLoans((prev) =>
+        prev.map((l) => (l.id === updatedLoanData.id ? data : l))
+      );
+      setEditingLoan(null);
 
+      toast({
+        title: 'Éxito',
+        description: 'Préstamo actualizado correctamente.',
+      });
+    } catch (error) {
+      console.error('❌ Error en handleUpdateLoan:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el préstamo.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // 🔹 Eliminar préstamo
+  const handleDeleteLoan = async (loanId: string) => {
+    try {
+      const res = await fetch('/api/loans', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: loanId }),
+      });
+
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.message || data.error || 'Error eliminando préstamo');
+
+      setLoans((prev) => prev.filter((loan) => loan.id !== loanId));
+
+      toast({
+        title: 'Éxito',
+        description: 'Préstamo eliminado correctamente.',
+      });
+    } catch (error) {
+      console.error('❌ Error en handleDeleteLoan:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el préstamo.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUpdateCapital = async () => {
+    setTotalCapital(newCapital);
+    setEditCapitalOpen(false);
     toast({
-      title: 'Éxito',
-      description: 'Préstamo actualizado correctamente.',
+      title: 'Éxito (Simulado)',
+      description: 'Capital actualizado correctamente.',
     });
-  } catch (error) {
-    console.error('❌ Error en handleUpdateLoan:', error);
-    toast({
-      title: 'Error',
-      description: 'No se pudo actualizar el préstamo.',
-      variant: 'destructive',
-    });
-  }
-};
+  };
 
-// 🔹 Eliminar préstamo
-const handleDeleteLoan = async (loanId: string) => {
-  try {
-    const res = await fetch('/api/loans', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: loanId }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || data.error || 'Error eliminando préstamo');
-
-    setLoans((prev) => prev.filter((loan) => loan.id !== loanId));
-
-    toast({
-      title: 'Éxito',
-      description: 'Préstamo eliminado correctamente.',
-    });
-  } catch (error) {
-    console.error('❌ Error en handleDeleteLoan:', error);
-    toast({
-      title: 'Error',
-      description: 'No se pudo eliminar el préstamo.',
-      variant: 'destructive',
-    });
-  }
-};
-
-// 🔹 Simular actualización de capital
-const handleUpdateCapital = async () => {
-  setTotalCapital(newCapital);
-  setEditCapitalOpen(false);
-
-  toast({
-    title: 'Éxito (Simulado)',
-    description: 'Capital actualizado correctamente.',
-  });
-};
-
+  // ✅ FIXED: reemplazamos parseISO + UTC drift
   const updateLoanWithLateFees = (loan: Loan): Loan => {
     let totalLateFee = 0;
     const updatedInstallments = loan.installments.map((inst) => {
       let isOverdue = false;
       if (inst?.dueDate) {
-        try {
-          const dueDate = parseISO(String(inst.dueDate));
-          isOverdue = isPast(dueDate) && inst.status !== 'Pagado';
-        } catch {
+        const dueDateObj = new Date(inst.dueDate); // ✅ FIXED
+        if (!isNaN(dueDateObj.getTime())) {
+          isOverdue = isPast(dueDateObj) && inst.status !== 'Pagado';
+        } else {
           console.warn('Fecha inválida en cuota:', inst.dueDate);
         }
       }
@@ -350,7 +392,8 @@ const handleUpdateCapital = async () => {
         0
       );
 
-    const totalPending = (loan.amountToPay ?? 0) - (loan.amountApplied ?? 0) + totalLateFee;
+    const totalPending =
+      (loan.amountToPay ?? 0) - (loan.amountApplied ?? 0) + totalLateFee;
 
     return {
       ...loan,
@@ -361,7 +404,7 @@ const handleUpdateCapital = async () => {
     };
   };
 
-  // 🔹 Seleccionar cliente por id
+  // 🔹 Seleccionar cliente
   const handleSelectClient = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
     if (client) {
@@ -404,6 +447,7 @@ const handleUpdateCapital = async () => {
           paymentMethod,
         }),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error procesando pago');
 
@@ -433,7 +477,11 @@ const handleUpdateCapital = async () => {
       setPaymentAmount(0);
       setPaymentMethod('cash');
       setApplyOverpaymentToPrincipal(false);
-      toast({ title: 'Éxito', description: 'Pago procesado correctamente.' });
+
+      toast({
+        title: 'Éxito',
+        description: 'Pago procesado correctamente.',
+      });
     } catch (error) {
       console.error(error);
       toast({
@@ -444,12 +492,20 @@ const handleUpdateCapital = async () => {
     }
   };
 
-  // 🔹 Préstamos del cliente seleccionado
-  const clientLoans = selectedClient
-    ? loans.filter((loan) => (loan as any)?.customerId === selectedClient.id)
-    : [];
+  // ✅ FIXED: corregido filtro (usa client_id)
+  // ✅ recalcula cada vez que loans o selectedClient cambian
+const [clientLoans, setClientLoans] = useState<Loan[]>([]);
 
-  // 🔹 Búsqueda de clientes (por nombre o email)
+useEffect(() => {
+  if (selectedClient) {
+    const filtered = loans.filter((loan) => loan.client_id === selectedClient.id);
+    setClientLoans(filtered);
+  } else {
+    setClientLoans([]);
+  }
+}, [loans, selectedClient]);
+
+    
   const filteredClients = clientSearch
     ? clients.filter(
         (c) =>
@@ -457,6 +513,7 @@ const handleUpdateCapital = async () => {
           (c.email?.toLowerCase() ?? '').includes(clientSearch.toLowerCase())
       )
     : [];
+
   return (
     <div className="space-y-6">
       {role === 'admin' && (
@@ -474,6 +531,7 @@ const handleUpdateCapital = async () => {
                   })}`}
                 </p>
               </div>
+
               <div className="flex h-16 min-w-[120px] flex-col justify-center rounded-lg border bg-card p-2 text-center text-destructive">
                 <h3 className="font-medium text-muted-foreground">
                   Capital Prestado
@@ -534,6 +592,9 @@ const handleUpdateCapital = async () => {
         </div>
       )}
 
+      {/* ======================== */}
+      {/* CLIENTE Y NUEVO PRÉSTAMO */}
+      {/* ======================== */}
       <Card className="no-print">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -625,6 +686,9 @@ const handleUpdateCapital = async () => {
           )}
         </CardHeader>
 
+        {/* ======================== */}
+        {/* LISTADO DE PRÉSTAMOS */}
+        {/* ======================== */}
         <CardContent>
           {!selectedClient ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
@@ -643,14 +707,19 @@ const handleUpdateCapital = async () => {
                   <AccordionTrigger>
                     <div className="flex w-full items-center justify-between pr-4">
                       <div className="text-left">
-                        <p className="font-semibold">{loan.loanNumber}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {`$${(loan.amount ?? 0).toLocaleString('es-ES', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })} — ${loan.startDate ?? ''}`}
-                        </p>
-                      </div>
+  <p className="font-semibold">{loan.loanNumber}</p>
+  <p className="text-sm text-muted-foreground">
+    {`$${(loan.amount ?? 0).toLocaleString('es-ES', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} — ${
+      loan.startDate
+        ? new Date(loan.startDate as string).toLocaleDateString('es-DO')
+        : 'Sin fecha'
+    }`}
+  </p>
+</div>
+
                       <div className="text-right">
                         <p className="font-semibold text-destructive">
                           {`Pendiente: $${(loan.totalPending ?? 0).toLocaleString('es-ES', {
@@ -682,7 +751,7 @@ const handleUpdateCapital = async () => {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                            <DropdownMenuItem onClick={() => handleDeleteLoan(loan.id)}>
+                            <DropdownMenuItem onClick={() => handleEditLoan(loan)}>
                               Editar Préstamo
                             </DropdownMenuItem>
                             <DropdownMenuItem
@@ -695,6 +764,10 @@ const handleUpdateCapital = async () => {
                         </DropdownMenu>
                       )}
                     </div>
+
+                    {/* ======================== */}
+                    {/* TABLA DE CUOTAS */}
+                    {/* ======================== */}
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -711,7 +784,14 @@ const handleUpdateCapital = async () => {
                         {loan.installments.map((inst) => (
                           <TableRow key={inst.id || `${loan.id}-${inst.installmentNumber}`}>
                             <TableCell>{inst.installmentNumber}</TableCell>
-                            <TableCell>{inst.dueDate}</TableCell>
+
+                            {/* ✅ FIXED: mostrar fecha local segura */}
+                            <TableCell>
+                              {inst.dueDate
+                                ? new Date(inst.dueDate).toLocaleDateString('es-DO')
+                                : '—'}
+                            </TableCell>
+
                             <TableCell>
                               {`$${(inst.principal_amount ?? 0).toLocaleString('es-ES', {
                                 minimumFractionDigits: 2,
@@ -761,7 +841,9 @@ const handleUpdateCapital = async () => {
         </CardContent>
       </Card>
 
-      {/* Modal Editar */}
+      {/* ======================== */}
+      {/* MODAL EDITAR PRÉSTAMO */}
+      {/* ======================== */}
       <Dialog open={!!editingLoan} onOpenChange={(isOpen) => !isOpen && setEditingLoan(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
@@ -773,212 +855,84 @@ const handleUpdateCapital = async () => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Pago */}
-      {loanToPay && (
-        <Dialog open={isPayModalOpen} onOpenChange={setPayModalOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Procesar Pago para {loanToPay.loanNumber}</DialogTitle>
-              <DialogDescription>
-                Seleccione el método de pago e ingrese el monto recibido.
-              </DialogDescription>
-            </DialogHeader>
+{/* ======================== */}
+{/* NUEVO MODAL DE PAGO (PayLoanModal) */}
+{/* ======================== */}
+<PayLoanModal
+  open={isPayModalOpen}
+  onClose={() => {
+    setPayModalOpen(false);
+    setLoanToPay(null);
+  }}
+  loan={loanToPay}
+  onPaymentSuccess={async (updatedLoan: Loan) => {
+    try {
+      if (!updatedLoan || !updatedLoan.id) {
+        console.warn('⚠️ No se recibió un préstamo actualizado válido:', updatedLoan);
+        return;
+      }
 
-            <div className="space-y-6">
-              <div>
-                <Label className="mb-2 block">Método de Pago</Label>
-                <RadioGroup
-                  defaultValue="cash"
-                  className="grid grid-cols-2 gap-4"
-                  onValueChange={(value: PaymentMethod) => setPaymentMethod(value)}
-                >
-                  <Label
-                    htmlFor="cash"
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
-                  >
-                    <RadioGroupItem value="cash" id="cash" className="sr-only" />
-                    <Wallet className="mb-3 h-6 w-6" />
-                    Efectivo
-                  </Label>
+      // ✅ 1. Actualiza el préstamo en memoria
+      setLoans((prev) =>
+        prev.map((loan) =>
+          loan.id === updatedLoan.id ? { ...loan, ...updatedLoan } : loan
+        )
+      );
 
-                  <Label
-                    htmlFor="card"
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
-                  >
-                    <RadioGroupItem value="card" id="card" className="sr-only" />
-                    <CreditCard className="mb-3 h-6 w-6" />
-                    Tarjeta
-                  </Label>
+      // ✅ 2. Si pertenece al cliente seleccionado, fuerza refresco visual
+      if (selectedClient && updatedLoan.client_id === selectedClient.id) {
+        setSelectedClient({
+          ...selectedClient,
+          lastUpdatedAt: Date.now(),
+        } as Client);
 
-                  <Label
-                    htmlFor="transfer"
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
-                  >
-                    <RadioGroupItem value="transfer" id="transfer" className="sr-only" />
-                    <Landmark className="mb-3 h-6 w-6" />
-                    Transferencia
-                  </Label>
+        // 🔄 3. Fetch rápido para recargar los préstamos del cliente
+        const baseUrl =
+          typeof window !== 'undefined'
+            ? window.location.origin
+            : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
 
-                  <Label
-                    htmlFor="mixed"
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground [&:has([data-state=checked])]:border-primary"
-                  >
-                    <RadioGroupItem value="mixed" id="mixed" className="sr-only" />
-                    <Coins className="mb-3 h-6 w-6" />
-                    Mixto
-                  </Label>
-                </RadioGroup>
-              </div>
+        const res = await fetch(`${baseUrl}/api/loans`, { cache: 'no-store' });
+        const data = await res.json();
 
-              <div className="space-y-2">
-                <Label htmlFor="payment-amount">Monto Recibido</Label>
-                <Input
-                  id="payment-amount"
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(Number(e.target.value))}
-                  placeholder="0.00"
-                />
-              </div>
+        if (res.ok && Array.isArray(data?.loans)) {
+          const filtered = data.loans.filter(
+            (loan: Loan) => loan.client_id === selectedClient.id
+          );
+          setClientLoans(filtered);
+        } else {
+          console.warn('⚠️ No se pudieron recargar los préstamos del cliente');
+        }
+      }
 
-              {change > 0 && (
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="apply-overpayment"
-                    checked={applyOverpaymentToPrincipal}
-                    onCheckedChange={setApplyOverpaymentToPrincipal}
-                  />
-                  <Label htmlFor="apply-overpayment">
-                    {`Abonar $${change.toLocaleString('es-ES', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })} al capital`}
-                  </Label>
-                </div>
-              )}
+      // ✅ 4. Cierra el modal
+      setLoanToPay(null);
+      setPayModalOpen(false);
 
-              <Separator />
+      // ✅ 5. Feedback visual
+      toast({
+        title: 'Pago procesado',
+        description: `El pago del préstamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
+      });
+    } catch (error) {
+      console.error('❌ Error refrescando préstamos tras el pago:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar la lista de préstamos.',
+        variant: 'destructive',
+      });
+    }
+  }}
+/>
 
-              <div className="space-y-4 text-lg">
-                <div className="flex justify-between font-semibold">
-                  <span>Total a Pagar (cuota actual):</span>
-                  <span>
-                    {`$${dueAmount.toLocaleString('es-ES', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`}
-                  </span>
-                </div>
 
-                <div
-                  className={`flex justify-between font-bold ${
-                    change < 0 ? 'text-destructive' : 'text-primary'
-                  }`}
-                >
-                  <span>
-                    {applyOverpaymentToPrincipal && change > 0 ? 'Abono a Capital:' : 'Cambio:'}
-                  </span>
-                  <span>
-                    {`$${Math.max(0, change).toLocaleString('es-ES', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}`}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPayModalOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleProcessPayment} disabled={paymentAmount <= 0}>
-                <Printer className="mr-2 h-4 w-4" /> Confirmar e Imprimir Recibo
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Modal Tarjeta de pago */}
-      {loanForCard && (
-        <Dialog open={!!loanForCard} onOpenChange={(isOpen) => !isOpen && setLoanForCard(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Préstamo Creado Exitosamente</DialogTitle>
-              <DialogDescription>
-                El préstamo ha sido guardado. ¿Desea imprimir la tarjeta de control?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setLoanForCard(null)}>
-                Cerrar
-              </Button>
-              <Button onClick={handlePrint}>
-                <Printer className="mr-2 h-4 w-4" /> Imprimir Tarjeta
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Modal Recibo */}
-      {receiptDetails && (
-        <Dialog open={!!receiptDetails} onOpenChange={(isOpen) => !isOpen && setReceiptDetails(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Pago Procesado</DialogTitle>
-              <DialogDescription>El pago ha sido registrado. ¿Desea imprimir un recibo?</DialogDescription>
-            </DialogHeader>
-            <div className="text-sm">
-              <p>
-                <strong>Monto Pagado:</strong>{' '}
-                {`$${(receiptDetails.amountPaid ?? 0).toLocaleString('es-ES', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}`}
-              </p>
-              {receiptDetails.principalApplied > 0 && (
-                <p>
-                  <strong>Abono a Capital:</strong>{' '}
-                  {`$${(receiptDetails.principalApplied ?? 0).toLocaleString('es-ES', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}`}
-                </p>
-              )}
-              <p>
-                <strong>Devuelta:</strong>{' '}
-                {`$${(receiptDetails.change ?? 0).toLocaleString('es-ES', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}`}
-              </p>
-              <p>
-                <strong>Balance Pendiente:</strong>{' '}
-                {`$${(receiptDetails.loan.totalPending ?? 0).toLocaleString('es-ES', {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}`}
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setReceiptDetails(null)}>
-                Cerrar
-              </Button>
-              <Button onClick={handlePrint}>
-                <Printer className="mr-2 h-4 w-4" /> Imprimir Recibo
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Área imprimible oculta */}
+      {/* ======================== */}
+      {/* ÁREA IMPRIMIBLE */}
+      {/* ======================== */}
       <div className="printable-area absolute left-0 top-0 -z-10 h-0 w-0 overflow-hidden">
         {loanToPrint && <LoanPaymentCardWithPrint loan={loanToPrint} />}
         {receiptDetails && <PaymentReceiptWithPrint details={receiptDetails} />}
       </div>
     </div>
-  );
+  )
 }
