@@ -77,6 +77,7 @@ import PayLoanModal from './pay-loan-modal';
 type PaymentMethod = 'cash' | 'transfer' | 'card' | 'mixed';
 const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+
 export default function LoansClient({
   loans: initialLoans,
   clients: initialClients,
