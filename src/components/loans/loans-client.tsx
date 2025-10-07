@@ -64,7 +64,6 @@ import {
 import { Badge } from '../ui/badge';
 import LoanPaymentCardWithPrint from './loan-payment-card';
 import PaymentReceiptWithPrint from './payment-receipt';
-// ✅ FIXED: eliminar parseISO y usar formato local seguro
 import { isPast } from 'date-fns';
 import { useAuth } from '@/hooks/use-auth';
 import { Label } from '../ui/label';
@@ -75,8 +74,6 @@ import { useToast } from '@/hooks/use-toast';
 import PayLoanModal from './pay-loan-modal';
 
 type PaymentMethod = 'cash' | 'transfer' | 'card' | 'mixed';
-const [refreshTrigger, setRefreshTrigger] = useState(0);
-
 
 export default function LoansClient({
   loans: initialLoans,
@@ -87,7 +84,7 @@ export default function LoansClient({
 }) {
   const { role } = useAuth();
   const { toast } = useToast();
-
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [loanToPrint, setLoanToPrint] = useState<Loan | null>(null);
   
   // 🔹 Estados locales

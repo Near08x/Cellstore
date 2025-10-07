@@ -1,7 +1,14 @@
-import type {NextConfig} from 'next';
+import type { NextConfig } from 'next';
+import withPWAInit from 'next-pwa';
+
+// Inicializamos next-pwa con opciones
+const withPWA = withPWAInit({
+  dest: 'public',
+  register: true,
+  skipWaiting: true,
+});
 
 const nextConfig: NextConfig = {
-  /* config options here */
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -13,38 +20,40 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'placehold.co',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'picsum.photos',
-        port: '',
         pathname: '/**',
       },
     ],
   },
+  // ✅ Propiedades válidas de devIndicators
   devIndicators: {
-    allowedDevOrigins: [
-      '*.cluster-fsmcisrvfbb5cr5mvra3hr3qyg.cloudworkstations.dev',
-    ],
+    buildActivity: true,
+    buildActivityPosition: 'top-right',
+  },
+
+  // ✅ Opcional: permitir peticiones desde dominios específicos (CORS)
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: '*', // o pon tu dominio: 'https://cluster-fsmcisrvfbb5cr5mvra3hr3qyg.cloudworkstations.dev'
+          },
+        ],
+      },
+    ];
   },
 };
 
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-});
-
-module.exports = withPWA({
-  // otras configuraciones de Next.js
-});
-
-export default nextConfig;
+export default withPWA(nextConfig);
