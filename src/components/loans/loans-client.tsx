@@ -222,7 +222,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
     const data = await res.json();
     if (!res.ok)
-      throw new Error(data.message || data.error || 'Error creando pr  stamo');
+      throw new Error(data.message || data.error || 'Error creando prestamo');
 
     //     1. Agregar el nuevo pr  stamo al estado global
     setLoans((prev) => [data, ...prev]);
@@ -274,7 +274,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
     //     4. Mostrar toast confirmando
     toast({
       title: '  xito',
-      description: `Pr  stamo ${data.loanNumber} a  adido correctamente.`,
+      description: `Prestamo ${data.loanNumber} a  adido correctamente.`,
     });
 
     //     5. Esperar un poco y abrir autom  ticamente el pr  stamo reci  n creado
@@ -333,7 +333,7 @@ const handleEditLoan = (loan: Loan) => {
 
       const data = await res.json();
       if (!res.ok)
-        throw new Error(data.message || data.error || 'Error actualizando pr  stamo');
+        throw new Error(data.message || data.error || 'Error actualizando prestamo');
 
       setLoans((prev) =>
         prev.map((l) => (l.id === updatedLoanData.id ? data : l))
@@ -342,13 +342,13 @@ const handleEditLoan = (loan: Loan) => {
 
       toast({
         title: '  xito',
-        description: 'Pr  stamo actualizado correctamente.',
+        description: 'Prestamo actualizado correctamente.',
       });
     } catch (error) {
       console.error('    Error en handleUpdateLoan:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar el pr  stamo.',
+        description: 'No se pudo actualizar el prestamo.',
         variant: 'destructive',
       });
     }
@@ -365,19 +365,19 @@ const handleEditLoan = (loan: Loan) => {
 
       const data = await res.json();
       if (!res.ok)
-        throw new Error(data.message || data.error || 'Error eliminando pr  stamo');
+        throw new Error(data.message || data.error || 'Error eliminando prestamo');
 
       setLoans((prev) => prev.filter((loan) => loan.id !== loanId));
 
       toast({
         title: '  xito',
-        description: 'Pr  stamo eliminado correctamente.',
+        description: 'Prestamo eliminado correctamente.',
       });
     } catch (error) {
       console.error('    Error en handleDeleteLoan:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo eliminar el pr  stamo.',
+        description: 'No se pudo eliminar el prestamo.',
         variant: 'destructive',
       });
     }
@@ -698,13 +698,13 @@ useEffect(() => {
                   <Button size="sm" className="h-9 gap-1">
                     <PlusCircle className="h-3.5 w-3.5" />
                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                      Nuevo Pr  stamo
+                      Nuevo Prestamo
                     </span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-4xl">
                   <DialogHeader>
-                    <DialogTitle>Crear Nuevo Pr  stamo</DialogTitle>
+                    <DialogTitle>Crear Nuevo Prestamo</DialogTitle>
                   </DialogHeader>
                   <NewLoanForm
                     clients={clients}
@@ -801,7 +801,7 @@ useEffect(() => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => handleEditLoan(loan)}>
-                              Editar Pr  stamo
+                              Editar Prestamo
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
@@ -896,7 +896,7 @@ useEffect(() => {
       <Dialog open={!!editingLoan} onOpenChange={(isOpen) => !isOpen && setEditingLoan(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Editar Pr  stamo</DialogTitle>
+            <DialogTitle>Editar Prestamo</DialogTitle>
           </DialogHeader>
           {editingLoan && (
             <EditLoanForm loan={editingLoan} clients={clients} onUpdateLoan={handleUpdateLoan} />
@@ -917,7 +917,7 @@ useEffect(() => {
   onPaymentSuccess={async (updatedLoan: Loan) => {
     try {
       if (!updatedLoan || !updatedLoan.id) {
-        console.warn('       No se recibi   un pr  stamo actualizado v  lido:', updatedLoan);
+        console.warn('       No se recibio un prestamo actualizado valido:', updatedLoan);
         return;
       }
 
@@ -961,7 +961,7 @@ useEffect(() => {
       //     5. Feedback visual
       toast({
         title: 'Pago procesado',
-        description: `El pago del pr  stamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
+        description: `El pago del prestamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
       });
     } catch (error) {
       console.error('    Error refrescando Préstamos tras el pago:', error);
