@@ -1,8 +1,7 @@
-'use client';
+﻿'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
 import { useToast } from '@/hooks/use-toast';
 import type { User, Session } from '@supabase/supabase-js';
 import type { Role } from '@/lib/types';
@@ -31,78 +30,90 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
   const { toast } = useToast();
 
-  // 🔹 Cargar sesión inicial
+  // Cargar usuario persistido (localStorage)
   const loadUser = useCallback(async () => {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.error('[AuthProvider] Error loading session', error);
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem('app_user') : null;
+      const rawRole = typeof window !== 'undefined' ? localStorage.getItem('app_role') : null;
+      if (raw) {
+        const u = JSON.parse(raw);
+        setUser(u as unknown as User);
+        setIsAuthenticated(true);
+        if (rawRole) setRoleState(rawRole as Role);
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
+    } catch (e) {
+      console.warn('[AuthProvider] Error loading persisted user', e);
+      setUser(null);
+      setIsAuthenticated(false);
+    } finally {
+      setIsLoading(false);
     }
-    setSession(data.session);
-    setUser(data.session?.user ?? null);
-    setIsAuthenticated(!!data.session?.user);
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
     loadUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsAuthenticated(!!session?.user);
-    });
-
-    return () => listener.subscription.unsubscribe();
   }, [loadUser]);
 
-  // 🔹 Redirección
+  // Redirección
   useEffect(() => {
     if (isLoading) return;
     if (!isAuthenticated && pathname !== '/login') router.push('/login');
     if (isAuthenticated && pathname === '/login') router.push('/');
   }, [isAuthenticated, isLoading, pathname, router]);
 
-  // 🔹 Login
+  // Login usando API /profiles (persistencia local)
   const login = async (email: string, password: string): Promise<boolean> => {
-  try {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    if (!res.ok) {
+      if (!res.ok) {
+        toast({
+          title: 'Error de autenticación',
+          description: 'Correo o contraseña incorrectos.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const { user: apiUser } = await res.json();
+      setSession(null);
+      setUser(apiUser as unknown as User);
+      setIsAuthenticated(true);
+      setRoleState((apiUser as any).role as Role);
+
+      try {
+        localStorage.setItem('app_user', JSON.stringify(apiUser));
+        localStorage.setItem('app_role', String((apiUser as any).role));
+      } catch {}
+
       toast({
-        title: 'Error de autenticación',
-        description: 'Correo o contraseña incorrectos.',
+        title: 'Inicio de sesión exitoso',
+        description: `Bienvenido ${(apiUser as any).username || (apiUser as any).email}`,
+      });
+      return true;
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo conectar con el servidor.',
         variant: 'destructive',
-      })
-      return false
+      });
+      return false;
     }
+  };
 
-    const { user } = await res.json()
-    setUser(user)
-    setIsAuthenticated(true)
-    setRole(user.role)
-
-    toast({
-      title: 'Inicio de sesión exitoso',
-      description: `Bienvenido ${user.username}`,
-    })
-    return true
-  } catch (error) {
-    toast({
-      title: 'Error',
-      description: 'No se pudo conectar con el servidor.',
-      variant: 'destructive',
-    })
-    return false
-  }
-}
-
-  // 🔹 Logout
+  // Logout
   const logout = async () => {
-    await supabase.auth.signOut();
+    try {
+      localStorage.removeItem('app_user');
+      localStorage.removeItem('app_role');
+    } catch {}
     setUser(null);
     setSession(null);
     setIsAuthenticated(false);

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { UserNav } from '@/components/user-nav';
 import { usePathname } from 'next/navigation';
@@ -35,3 +35,4 @@ export default function Header() {
     </header>
   );
 }
+

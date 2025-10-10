@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { CreditCard, DollarSign, Package } from 'lucide-react';
 import SummaryCard from '@/components/dashboard/summary-card';
 import RecentSales from '@/components/dashboard/recent-sales';
@@ -32,7 +32,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('[Dashboard] Mounted → estoy en /');
+    console.log('[Dashboard] Mounted   estoy en /');
 
     const fetchData = async () => {
       try {
@@ -75,7 +75,7 @@ export default function Home() {
   const lowStockItems = products.filter((product) => product.stock < 10).length;
   const totalProducts = products.length;
 
-  console.log('[Dashboard] Render →', { products, sales, loading });
+  console.log('[Dashboard] Render  ', { products, sales, loading });
 
   if (loading) {
     return (
@@ -140,3 +140,4 @@ export default function Home() {
     </MainLayout>
   );
 }
+

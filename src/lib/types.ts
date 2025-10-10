@@ -1,5 +1,5 @@
-// =========================
-// 📦 PRODUCTOS
+﻿// =========================
+//    PRODUCTOS
 // =========================
 export type Product = {
   id: string;
@@ -14,7 +14,7 @@ export type Product = {
 };
 
 // =========================
-// 🧾 DETALLES DE VENTA
+//    DETALLES DE VENTA
 // =========================
 export type SaleDetail = {
   productId: string;
@@ -25,7 +25,7 @@ export type SaleDetail = {
 };
 
 // =========================
-// 💰 VENTAS
+//    VENTAS
 // =========================
 export type Sale = {
   id: string;
@@ -37,7 +37,7 @@ export type Sale = {
 };
 
 // =========================
-// 👤 CLIENTES
+//    CLIENTES
 // =========================
 export type Client = {
   id: string;       // UUID generado por Supabase
@@ -48,7 +48,7 @@ export type Client = {
 };
 
 // =========================
-// 🧮 CUOTAS (loan_installments)
+//    CUOTAS (loan_installments)
 // =========================
 export type InstallmentStatus =
   | 'Pendiente'
@@ -60,17 +60,24 @@ export type Installment = {
   id: number;                     // SERIAL
   loan_id?: string;               // FK a loans.id
   installmentNumber: number;      // corresponde a installment_number
-  dueDate: string;                // due_date (fecha límite)
+
+  //    Compatibilidad total con backend
+  due_date: string;               // snake_case (Supabase)
+  dueDate?: string;               // camelCase (Frontend)
+  
   principal_amount: number;       // principal_amount
   interest_amount: number;        // interest_amount
   paidAmount: number;             // paid_amount
   lateFee: number;                // late_fee
   status: InstallmentStatus;      // estado de la cuota
-  paymentDate?: string | null;    // payment_date opcional
+
+  //    Compatibilidad de fecha de pago
+  payment_date?: string | null;
+  paymentDate?: string | null;
 };
 
 // =========================
-// 💳 PRÉSTAMOS (loans)
+//    PR STAMOS (loans)
 // =========================
 export type LoanStatus =
   | 'Pendiente'
@@ -86,8 +93,12 @@ export type Loan = {
 
   // Fechas
   loanDate: string;               // fecha de creación del préstamo
-  startDate?: string;             // start_date (inicio real)
-  dueDate: string | null;         // due_date (fecha final del préstamo)
+
+  //    Compatibilidad con backend y frontend
+  start_date?: string;            // backend (snake_case)
+  startDate?: string;             // frontend (camelCase)
+  due_date?: string | null;       // backend
+  dueDate?: string | null;        // frontend
 
   // Datos financieros
   principal: number;
@@ -111,7 +122,7 @@ export type Loan = {
 };
 
 // =========================
-// 👥 ROLES Y USUARIOS
+//    ROLES Y USUARIOS
 // =========================
 export type Role = 'admin' | 'cashier' | 'employee' | 'user';
 
@@ -122,3 +133,5 @@ export type User = {
   role: Role;
   passwordHash: string;
 };
+
+

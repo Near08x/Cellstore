@@ -1,59 +1,40 @@
-import MainLayout from '@/components/main-layout';
+﻿import MainLayout from '@/components/main-layout';
 import FinanceDashboard from '@/components/finance/finance-dashboard';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import LoansFinanceDashboard from '@/components/finance/loans-finance-dashboard';
-import type { Product, Sale, Loan, Client } from '@/lib/types';
-import { supabase } from "@/lib/supabaseClient";
+import type { Product, Sale } from '@/lib/types';
+import { supabase } from '@/lib/supabaseClient';
 
-// 🔹 Reemplazamos fetch por consultas Supabase
 async function getData() {
   try {
-    const [productsRes, salesRes, loansRes, clientsRes] = await Promise.all([
-      supabase.from("products").select("*"),
-      supabase.from("sales").select("*"),
-      supabase.from("loans").select("*"),
-      supabase.from("clients").select("*"),
+    const [productsRes, salesRes] = await Promise.all([
+      supabase.from('products').select('*'),
+      supabase.from('sales').select('*'),
     ]);
 
-    // Manejo de errores
-    if (productsRes.error || salesRes.error || loansRes.error || clientsRes.error) {
+    if (productsRes.error || salesRes.error) {
       throw new Error(
-        `Supabase error: ${productsRes.error?.message || ""} 
-        ${salesRes.error?.message || ""} 
-        ${loansRes.error?.message || ""} 
-        ${clientsRes.error?.message || ""}`
+        `Supabase error: ${productsRes.error?.message || ''} ${salesRes.error?.message || ''}`
       );
     }
 
     return {
       products: (productsRes.data as Product[]) ?? [],
       sales: (salesRes.data as Sale[]) ?? [],
-      loans: (loansRes.data as Loan[]) ?? [],
-      clients: (clientsRes.data as Client[]) ?? [],
     };
   } catch (error) {
-    console.error("Error fetching finance data:", error);
-    return { products: [], sales: [], loans: [], clients: [] };
+    console.error('Error fetching finance data:', error);
+    return { products: [], sales: [] };
   }
 }
 
 export default async function FinancePage() {
-  const { products, sales, loans, clients } = await getData();
+  const { products, sales } = await getData();
 
   return (
     <MainLayout>
-      <Tabs defaultValue="pos" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="pos">Finanzas de POS/Inventario</TabsTrigger>
-          <TabsTrigger value="loans">Finanzas de Préstamos</TabsTrigger>
-        </TabsList>
-        <TabsContent value="pos">
-          <FinanceDashboard sales={sales} products={products} />
-        </TabsContent>
-        <TabsContent value="loans">
-          <LoansFinanceDashboard loans={loans} clients={clients} />
-        </TabsContent>
-      </Tabs>
+      <FinanceDashboard sales={sales} products={products} />
     </MainLayout>
   );
 }
+
+
+

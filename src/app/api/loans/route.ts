@@ -1,11 +1,12 @@
-
-export const dynamic = 'force-dynamic';
+﻿export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseServer';
 
-// ✅ Helper consistente para fechas locales "YYYY-MM-DD"
+// =======================
+//    Helpers de fecha
+// =======================
 function todayLocal(): string {
-  return new Date().toLocaleDateString('en-CA'); // formato ISO local
+  return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD local
 }
 function toLocalYYYYMMDD(d?: string | null): string | null {
   if (!d) return null;
@@ -13,18 +14,59 @@ function toLocalYYYYMMDD(d?: string | null): string | null {
   if (isNaN(dt.getTime())) return null;
   return dt.toLocaleDateString('en-CA');
 }
+function isPaid(installment: {
+  principal_amount?: number | null;
+  interest_amount?: number | null;
+  paid_amount?: number | null;
+  late_fee?: number | null;
+}) {
+  const total =
+    Number(installment.principal_amount ?? 0) +
+    Number(installment.interest_amount ?? 0) +
+    Number(installment.late_fee ?? 0);
+  const paid = Number(installment.paid_amount ?? 0);
+  return paid >= total - 1e-6;
+}
+function isOverdue(installment: { due_date?: string | null; status?: string | null }) {
+  if (!installment?.due_date) return false;
+  const due = new Date(installment.due_date);
+  if (isNaN(due.getTime())) return false;
+  const today = new Date(todayLocal());
+  return due < today && installment.status !== 'Pagado';
+}
 
-type Installment = {
-  id?: string;
+// Mapear estados de Préstamo EN -> ES
+function mapLoanStatus(status?: string | null): string {
+  const s = (status || '').toLowerCase();
+  switch (s) {
+    case 'pending':
+      return 'Pendiente';
+    case 'approved':
+      return 'Aprobado';
+    case 'paid':
+      return 'Pagado';
+    case 'canceled':
+    case 'cancelled':
+      return 'Cancelado';
+    default:
+      return status ?? 'Pendiente';
+  }
+}
+
+// =======================
+//    Tipos (minimos locales)
+// =======================
+type InstallmentInput = {
+  id?: string | number;
   due_date?: string;
+  dueDate?: string;
   principal_amount?: number;
   interest_amount?: number;
   paid_amount?: number;
   late_fee?: number;
   status?: 'Pendiente' | 'Pagado' | 'Atrasado' | 'Parcial';
-  payment_date?: string;
+  payment_date?: string | null;
 };
-
 type LoanInput = {
   id?: string;
   client_id?: string;
@@ -33,77 +75,143 @@ type LoanInput = {
   interest_rate: number;
   start_date?: string;
   status?: string;
-  installments?: Installment[];
+  installments?: InstallmentInput[];
 };
 
 // =======================
-// GET: obtener préstamos con cliente y cuotas
+// GET: listar Préstamos completos (con cliente, cuotas y pagos)
 // =======================
 export async function GET() {
   try {
-    const [loansRes, clientsRes] = await Promise.all([
-      supabase
-        .from('loans')
-        .select(`
-          id, loan_number, principal, interest_rate, amount, amount_to_pay, total, balance,
-          total_pending, amount_applied, start_date, status, created_at,
-          clients (id, name),
-          loan_installments (
-            id, installment_number, due_date, principal_amount, interest_amount,
-            paid_amount, late_fee, status, payment_date
-          )
-        `)
-        .order('created_at', { ascending: false }),
-      supabase.from('clients').select('id, name, email, phone, created_at'),
-    ]);
+    const { data: rawLoans, error: loanError } = await supabase
+      .from('loans')
+      .select(`
+        id,
+        client_id,
+        loan_number,
+        principal,
+        interest_rate,
+        amount,
+        amount_to_pay,
+        amount_applied,
+        total_pending,
+        total,
+        balance,
+        late_fee,
+        overdue_amount,
+        loan_date,
+        start_date,
+        due_date,
+        created_at,
+        updated_at,
+        status,
+        loan_installments (
+          id,
+          loan_id,
+          installment_number,
+          due_date,
+          principal_amount,
+          interest_amount,
+          paid_amount,
+          late_fee,
+          status,
+          payment_date
+        ),
+        loan_payments (
+          id,
+          loan_id,
+          installment_id,
+          amount_paid,
+          payment_method,
+          principal_applied,
+          change_returned,
+          created_at
+        ),
+        clients (
+          id,
+          name,
+          email
+        )
+      `)
+      .order('created_at', { ascending: false })
+      .order('installment_number', { foreignTable: 'loan_installments', ascending: true });
 
-    if (loansRes.error) throw loansRes.error;
-    if (clientsRes.error) throw clientsRes.error;
+    if (loanError) throw loanError;
 
-    const loans = loansRes.data?.map((loan: any) => ({
-      id: loan.id,
-      loanNumber: loan.loan_number,
-      principal: loan.principal ?? 0,
-      interestRate: loan.interest_rate ?? 0,
-      amount: loan.amount ?? 0,
-      amountToPay: loan.amount_to_pay ?? loan.total ?? 0,
-      total: loan.total ?? 0,
-      balance: loan.balance ?? 0,
-      totalPending: loan.total_pending ?? 0,
-      startDate: toLocalYYYYMMDD(loan.start_date),
-      status: loan.status,
-      amountApplied: loan.amount_applied ?? 0,
-      client_id: loan.clients?.id ?? null,
-      client_name: loan.clients?.name ?? 'Consumidor Final',
-      installments:
-        loan.loan_installments?.map((i: any) => ({
-          id: i.id,
-          installmentNumber: i.installment_number,
-          dueDate: toLocalYYYYMMDD(i.due_date),
-          principal_amount: i.principal_amount ?? 0,
-          interest_amount: i.interest_amount ?? 0,
-          paidAmount: i.paid_amount ?? 0,
-          lateFee: i.late_fee ?? 0,
-          status: i.status ?? 'Pendiente',
-          paymentDate: toLocalYYYYMMDD(i.payment_date),
-        })) ?? [],
-    }));
+    const loans = (rawLoans ?? []).map((loan: any) => {
+      const clientData = Array.isArray(loan.clients)
+        ? loan.clients[0] ?? {}
+        : loan.clients ?? {};
 
-    return NextResponse.json({
-      loans: loans ?? [],
-      clients: clientsRes.data ?? [],
+      return {
+        id: loan.id,
+        loanNumber: loan.loan_number,
+        client_id: loan.client_id,
+        client_name: clientData.name ?? '',
+        client_email: clientData.email ?? '',
+        principal: Number(loan.principal) || 0,
+        interestRate: Number(loan.interest_rate) || 0,
+        amount: Number(loan.amount) || 0,
+        amountToPay: Number(loan.amount_to_pay) || 0,
+        amountApplied: Number(loan.amount_applied) || 0,
+        totalPending: Number(loan.total_pending) || 0,
+        total: Number(loan.total) || 0,
+        balance: Number(loan.balance) || 0,
+        lateFee: Number(loan.late_fee) || 0,
+        overdueAmount: Number(loan.overdue_amount) || 0,
+        loanDate: loan.loan_date ? toLocalYYYYMMDD(loan.loan_date) : null,
+        startDate: loan.start_date ? toLocalYYYYMMDD(loan.start_date) : null,
+        dueDate: loan.due_date ? toLocalYYYYMMDD(loan.due_date) : null,
+        createdAt: loan.created_at,
+        updatedAt: loan.updated_at,
+        status: mapLoanStatus(loan.status),
+
+        installments:
+          (loan.loan_installments ?? []).map((i: any) => ({
+            id: i.id,
+            installmentNumber: i.installment_number,
+            principal_amount: Number(i.principal_amount) || 0,
+            interest_amount: Number(i.interest_amount) || 0,
+            paidAmount: Number(i.paid_amount) || 0,
+            lateFee: Number(i.late_fee) || 0,
+            dueDate: i.due_date,
+            paymentDate: i.payment_date,
+            status: i.status,
+            // (compat opcional)
+            due_date: i.due_date,
+          })) ?? [],
+
+        payments:
+          (loan.loan_payments ?? []).map((p: any) => ({
+            id: p.id,
+            installment_id: p.installment_id,
+            amount_paid: Number(p.amount_paid) || 0,
+            payment_method: p.payment_method ?? 'cash',
+            principal_applied: Number(p.principal_applied) || 0,
+            change_returned: Number(p.change_returned) || 0,
+            created_at: p.created_at,
+          })) ?? [],
+      };
     });
+
+    const { data: clients, error: clientError } = await supabase
+      .from('clients')
+      .select('id, name, email');
+
+    if (clientError) throw clientError;
+
+    return NextResponse.json({ loans, clients });
   } catch (error) {
-    console.error('Error fetching loans and clients:', error);
+    console.error('  Error en GET /api/loans:', error);
     return NextResponse.json(
-      { message: 'Error fetching loans and clients', error },
+      { message: 'Error fetching loans', error: String(error) },
       { status: 500 }
     );
   }
 }
 
 // =======================
-// POST: crear préstamo (usa start_date y calcula due_date)
+// POST: carear Préstamo (usa start_date y calcula due_date)
 // =======================
 export async function POST(request: Request) {
   try {
@@ -112,7 +220,7 @@ export async function POST(request: Request) {
 
     if (!loanData.client_id) {
       return NextResponse.json(
-        { message: 'Debe seleccionar un cliente válido para crear un préstamo' },
+        { message: 'Debe seleccionar un cliente v lido para carear un Préstamo' },
         { status: 400 }
       );
     }
@@ -122,7 +230,6 @@ export async function POST(request: Request) {
     const interest = principal * (interestRate / 100);
     const total = principal + interest;
 
-    // ✅ Fechas de inicio y vencimiento
     const start_date = loanData.start_date
       ? toLocalYYYYMMDD(loanData.start_date)
       : todayLocal();
@@ -135,7 +242,6 @@ export async function POST(request: Request) {
           )
         : start_date;
 
-    // ✅ Insertar préstamo principal
     const { data: loan, error: loanError } = await supabase
       .from('loans')
       .insert({
@@ -144,12 +250,15 @@ export async function POST(request: Request) {
         principal,
         interest_rate: interestRate,
         amount: principal,
+        amount_to_pay: total,
         total,
         balance: total,
-        amount_to_pay: total,
         total_pending: total,
+        loan_date: todayLocal(),
         start_date,
         due_date,
+        late_fee: 0,
+        overdue_amount: 0,
         status: loanData.status || 'Pendiente',
       })
       .select()
@@ -157,9 +266,8 @@ export async function POST(request: Request) {
 
     if (loanError) throw loanError;
 
-    // ✅ Insertar cuotas vinculadas
-    let createdInstallments: any[] = [];
-
+    // Cuotas vinculadas
+    let careatedInstallments: any[] = [];
     if (installments && installments.length > 0) {
       const fallback = todayLocal();
 
@@ -182,49 +290,70 @@ export async function POST(request: Request) {
 
       if (instError) throw instError;
 
-      createdInstallments = (instData ?? []).map((i: any) => ({
-        ...i,
+      careatedInstallments = (instData ?? []).map((i: any) => ({
+        id: i.id,
+        installmentNumber: i.installment_number,
+        principal_amount: Number(i.principal_amount) || 0,
+        interest_amount: Number(i.interest_amount) || 0,
+        paidAmount: Number(i.paid_amount) || 0,
+        lateFee: Number(i.late_fee) || 0,
+        dueDate: toLocalYYYYMMDD(i.due_date),
+        paymentDate: i.payment_date ? toLocalYYYYMMDD(i.payment_date) : null,
+        status: i.status,
+        // (compat)
         due_date: toLocalYYYYMMDD(i.due_date),
-        payment_date: i.payment_date
-          ? toLocalYYYYMMDD(i.payment_date)
-          : null,
       }));
     }
 
-    await supabase
-      .from('clients')
-      .update({ last_loan_id: loan.id })
-      .eq('id', loan.client_id);
+    // Ajuste autom tico del capital si el total prestado supera el capital registrado
+    try {
+      const { data: allLoans } = await supabase.from('loans').select('amount');
+      const lentSum = (allLoans ?? []).reduce((acc: number, r: any) => acc + Number(r.amount || 0), 0);
+      const { data: cap } = await supabase
+        .from('capital')
+        .select('id, total')
+        .eq('id', 1)
+        .maybeSingle();
+      const currentTotal = Number(cap?.total ?? 0);
+      if (lentSum > currentTotal) {
+        await supabase.from('capital').upsert({ id: 1, total: lentSum });
+      }
+    } catch (e) {
+      console.warn('Aviso: no se pudo recalcular capital autom ticamente:', e);
+    }
 
     return NextResponse.json({
       id: loan.id,
       loanNumber: loan.loan_number,
-      principal: loan.principal ?? 0,
-      interestRate: loan.interest_rate ?? 0,
-      total: loan.total ?? 0,
-      balance: loan.balance ?? 0,
-      totalPending: loan.total_pending ?? 0,
+      client_id: loan.client_id,
+      principal: Number(loan.principal) || 0,
+      interestRate: Number(loan.interest_rate) || 0,
+      total: Number(loan.total) || 0,
+      balance: Number(loan.balance) || 0,
+      totalPending: Number(loan.total_pending) || 0,
+      amountToPay: Number(loan.amount_to_pay) || 0,
+      lateFee: Number(loan.late_fee) || 0,
+      overdueAmount: Number(loan.overdue_amount) || 0,
+      loanDate: toLocalYYYYMMDD(loan.loan_date),
       startDate: toLocalYYYYMMDD(loan.start_date),
       dueDate: toLocalYYYYMMDD(loan.due_date),
       status: loan.status,
-      amountApplied: loan.amount_applied ?? 0,
+      amountApplied: Number(loan.amount_applied) || 0,
       clientId: loan.client_id ?? null,
       clientName: '',
-      installments: createdInstallments ?? [],
+      installments: careatedInstallments ?? [],
+      payments: [],
     });
   } catch (error) {
-    console.error('Error creating loan:', error);
+    console.error('  Error careando Préstamo:', error);
     return NextResponse.json(
-      { message: 'Error creating loan', error },
+      { message: 'Error careando Préstamo', error: String(error) },
       { status: 500 }
     );
   }
 }
-
-
-
 // =======================
-// PUT: actualizar préstamo (solo mantiene start_date)
+// PUT: actualizar Préstamo (recalcula totales y due_date)
 // =======================
 export async function PUT(request: Request) {
   try {
@@ -235,6 +364,14 @@ export async function PUT(request: Request) {
       return NextResponse.json({ message: 'Loan ID is required for update' }, { status: 400 });
     }
 
+    // obtener amount_applied actual para no perderlo
+    const { data: current, error: curErr } = await supabase
+      .from('loans')
+      .select('amount_applied')
+      .eq('id', id)
+      .single();
+    if (curErr) throw curErr;
+
     const principal = Number(loanData.principal) || 0;
     const interestRate = Number(loanData.interest_rate) || 0;
     const interest = principal * (interestRate / 100);
@@ -244,6 +381,19 @@ export async function PUT(request: Request) {
       ? toLocalYYYYMMDD(loanData.start_date)
       : todayLocal();
 
+    const lastDue =
+      installments && installments.length > 0
+        ? toLocalYYYYMMDD(
+            (installments[installments.length - 1] as any).dueDate ??
+              (installments[installments.length - 1] as any).due_date
+          )
+        : null;
+
+    const total_pending = Math.max(
+      total - Number(current?.amount_applied ?? 0),
+      0
+    );
+
     const { error: loanError } = await supabase
       .from('loans')
       .update({
@@ -252,11 +402,12 @@ export async function PUT(request: Request) {
         principal,
         interest_rate: interestRate,
         amount: principal,
-        total,
-        balance: total,
         amount_to_pay: total,
-        total_pending: total,
+        total,
+        balance: total_pending,
+        total_pending,
         start_date,
+        due_date: lastDue,
         status: loanData.status || 'Pendiente',
         updated_at: new Date().toISOString(),
       })
@@ -270,8 +421,9 @@ export async function PUT(request: Request) {
       const fallback = todayLocal();
       const installmentsWithLoan = installments.map((i, idx) => ({
         loan_id: id,
-        installment_number: idx + 1,
-        due_date: i.due_date ? toLocalYYYYMMDD(i.due_date) : fallback,
+        installment_number:
+          (i as any).installmentNumber ?? (i as any).installment_number ?? idx + 1,
+        due_date: toLocalYYYYMMDD((i as any).dueDate ?? (i as any).due_date ?? fallback),
         principal_amount: i.principal_amount ?? 0,
         interest_amount: i.interest_amount ?? 0,
         paid_amount: 0,
@@ -286,56 +438,146 @@ export async function PUT(request: Request) {
       if (instError) throw instError;
     }
 
-    return NextResponse.json({
-      id,
-      loanNumber: loanData.loan_number ?? '',
-      principal,
-      interestRate,
-      total,
-      totalPending: total,
-      startDate: start_date,
-      status: loanData.status || 'Pendiente',
-      installments: installments ?? [],
-    });
+    // Responder con Préstamo completo (mismo shape que GET)
+    const { data: updated, error: selErr } = await supabase
+      .from('loans')
+      .select(`
+        id,
+        client_id,
+        loan_number,
+        principal,
+        interest_rate,
+        amount,
+        amount_to_pay,
+        amount_applied,
+        total_pending,
+        total,
+        balance,
+        late_fee,
+        overdue_amount,
+        loan_date,
+        start_date,
+        due_date,
+        created_at,
+        updated_at,
+        status,
+        loan_installments (
+          id,
+          loan_id,
+          installment_number,
+          due_date,
+          principal_amount,
+          interest_amount,
+          paid_amount,
+          late_fee,
+          status,
+          payment_date
+        ),
+        loan_payments (
+          id,
+          loan_id,
+          installment_id,
+          amount_paid,
+          payment_method,
+          principal_applied,
+          change_returned,
+          created_at
+        ),
+        clients (
+          id,
+          name,
+          email
+        )
+      `)
+      .eq('id', id)
+      .single();
+
+    if (selErr) throw selErr;
+
+    const clientData = Array.isArray(updated.clients)
+      ? updated.clients[0] ?? {}
+      : updated.clients ?? {};
+
+    const response = {
+      id: updated.id,
+      loanNumber: updated.loan_number,
+      client_id: updated.client_id,
+      client_name: clientData.name ?? '',
+      client_email: clientData.email ?? '',
+      principal: Number(updated.principal) || 0,
+      interestRate: Number(updated.interest_rate) || 0,
+      amount: Number(updated.amount) || 0,
+      amountToPay: Number(updated.amount_to_pay) || 0,
+      amountApplied: Number(updated.amount_applied) || 0,
+      totalPending: Number(updated.total_pending) || 0,
+      total: Number(updated.total) || 0,
+      balance: Number(updated.balance) || 0,
+      lateFee: Number(updated.late_fee) || 0,
+      overdueAmount: Number(updated.overdue_amount) || 0,
+      loanDate: updated.loan_date ? toLocalYYYYMMDD(updated.loan_date) : null,
+      startDate: updated.start_date ? toLocalYYYYMMDD(updated.start_date) : null,
+      dueDate: updated.due_date ? toLocalYYYYMMDD(updated.due_date) : null,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+      status: mapLoanStatus(updated.status),
+      installments:
+        (updated.loan_installments ?? []).map((i: any) => ({
+          id: i.id,
+          installmentNumber: i.installment_number,
+          principal_amount: Number(i.principal_amount) || 0,
+          interest_amount: Number(i.interest_amount) || 0,
+          paidAmount: Number(i.paid_amount) || 0,
+          lateFee: Number(i.late_fee) || 0,
+          dueDate: i.due_date,
+          paymentDate: i.payment_date,
+          status: i.status,
+          due_date: i.due_date,
+        })) ?? [],
+      payments:
+        (updated.loan_payments ?? []).map((p: any) => ({
+          id: p.id,
+          installment_id: p.installment_id,
+          amount_paid: Number(p.amount_paid) || 0,
+          payment_method: p.payment_method ?? 'cash',
+          principal_applied: Number(p.principal_applied) || 0,
+          change_returned: Number(p.change_returned) || 0,
+          created_at: p.created_at,
+        })) ?? [],
+    };
+
+    return NextResponse.json(response);
   } catch (error) {
-    console.error('Error updating loan:', error);
-    return NextResponse.json({ message: 'Error updating loan', error }, { status: 500 });
+    console.error('  Error actualizando Préstamo:', error);
+    return NextResponse.json({ message: 'Error updating loan', error: String(error) }, { status: 500 });
   }
 }
 
 // =======================
-// DELETE y PATCH se mantienen igual (ya correctos)
+// DELETE
 // =======================
-
 export async function DELETE(request: Request) {
   try {
     const { id } = (await request.json()) as { id: string };
 
     if (!id) {
-      return NextResponse.json(
-        { message: 'Loan ID is required for delete' },
-        { status: 400 }
-      );
+      return NextResponse.json({ message: 'Loan ID is required for delete' }, { status: 400 });
     }
 
-    // Primero eliminamos cuotas relacionadas
     await supabase.from('loan_installments').delete().eq('loan_id', id);
-
-    // (Opcional) Si quisieras eliminar pagos, descomenta:
-    // await supabase.from('loan_payments').delete().eq('loan_id', id);
+    await supabase.from('loan_payments').delete().eq('loan_id', id);
 
     const { error } = await supabase.from('loans').delete().eq('id', id);
     if (error) throw error;
 
     return NextResponse.json({ message: 'Loan deleted successfully' });
   } catch (error) {
-    console.error('Error deleting loan:', error);
-    return NextResponse.json({ message: 'Error deleting loan', error }, { status: 500 });
+    console.error('  Error deleting loan:', error);
+    return NextResponse.json({ message: 'Error deleting loan', error: String(error) }, { status: 500 });
   }
 }
 
 // =======================
-// PATCH: procesar pago de préstamo
+// PATCH: procesar pago
 // =======================
 export async function PATCH(request: Request) {
   try {
@@ -343,13 +585,10 @@ export async function PATCH(request: Request) {
     const { loanId, installmentId, amountPaid, paymentMethod } = body;
 
     if (!loanId || !amountPaid) {
-      return NextResponse.json(
-        { error: 'Faltan datos para procesar el pago' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Faltan datos para procesar el pago' }, { status: 400 });
     }
 
-    // 1️⃣ Obtener préstamo e cuotas
+    // 1   Obtener Préstamo con cuotas
     const { data: loan, error: loanError } = await supabase
       .from('loans')
       .select('*, loan_installments(*)')
@@ -366,7 +605,7 @@ export async function PATCH(request: Request) {
     let totalApplied = 0;
     let totalChange = 0;
 
-    // 2️⃣ Aplicar pago a las cuotas en orden
+    // 2   Aplicar pago a cuotas en orden
     for (const inst of installments) {
       if (remainingPayment <= 0) break;
 
@@ -374,18 +613,19 @@ export async function PATCH(request: Request) {
         Number(inst.principal_amount) +
         Number(inst.interest_amount) +
         Number(inst.late_fee ?? 0);
-      const pendiente = cuotaTotal - Number(inst.paid_amount ?? 0);
+      const yaPagado = Number(inst.paid_amount ?? 0);
+      const pendiente = Math.max(cuotaTotal - yaPagado, 0);
 
       if (pendiente <= 0) continue;
 
       if (remainingPayment >= pendiente) {
-        // 🔹 Se paga completamente esta cuota
+        // Paga completamente
         const { error: updateError } = await supabase
           .from('loan_installments')
           .update({
             paid_amount: cuotaTotal,
             status: 'Pagado',
-            payment_date: new Date().toISOString().split('T')[0],
+            payment_date: todayLocal(),
           })
           .eq('id', inst.id);
 
@@ -394,15 +634,15 @@ export async function PATCH(request: Request) {
         totalApplied += pendiente;
         remainingPayment -= pendiente;
       } else {
-        // 🔹 Pago parcial
-        const nuevoAbono = Number(inst.paid_amount ?? 0) + remainingPayment;
+        // Pago parcial
+        const nuevoAbono = yaPagado + remainingPayment;
 
         const { error: partialError } = await supabase
           .from('loan_installments')
           .update({
             paid_amount: nuevoAbono,
             status: 'Parcial',
-            payment_date: new Date().toISOString().split('T')[0],
+            payment_date: todayLocal(),
           })
           .eq('id', inst.id);
 
@@ -413,13 +653,38 @@ export async function PATCH(request: Request) {
       }
     }
 
-    // 3️⃣ Calcular cambio si sobró dinero
+    // 3   Cambio (si sobra)
     if (remainingPayment > 0) {
       totalChange = remainingPayment;
       remainingPayment = 0;
     }
 
-    // 4️⃣ Actualizar préstamo principal
+    // 4   Recalcular mora y vencidos
+    const { data: freshInst, error: freshErr } = await supabase
+      .from('loan_installments')
+      .select('*')
+      .eq('loan_id', loanId);
+
+    if (freshErr) throw freshErr;
+
+    let sumLateFees = 0;
+    let overdueAmount = 0;
+
+    for (const i of freshInst ?? []) {
+      const paid = isPaid(i);
+      const overdue = isOverdue(i);
+      const totalCuota =
+        Number(i.principal_amount ?? 0) +
+        Number(i.interest_amount ?? 0) +
+        Number(i.late_fee ?? 0);
+      const pagado = Number(i.paid_amount ?? 0);
+      const pendiente = Math.max(totalCuota - pagado, 0);
+
+      sumLateFees += Number(i.late_fee ?? 0);
+      if (!paid && overdue) overdueAmount += pendiente;
+    }
+
+    // 5   Actualizar Préstamo principal
     const totalPagado = Number(loan.amount_applied ?? 0) + totalApplied;
     const totalPendiente = Math.max(
       Number(loan.total_pending ?? 0) - totalApplied,
@@ -433,6 +698,8 @@ export async function PATCH(request: Request) {
         amount_applied: totalPagado,
         total_pending: totalPendiente,
         balance: totalPendiente,
+        late_fee: sumLateFees,
+        overdue_amount: overdueAmount,
         status: statusFinal,
         updated_at: new Date().toISOString(),
       })
@@ -440,37 +707,161 @@ export async function PATCH(request: Request) {
 
     if (loanUpdateError) throw loanUpdateError;
 
-    // 5️⃣ Registrar pago
+    // 6   Registrar pago
     const { error: payError } = await supabase.from('loan_payments').insert({
       loan_id: loanId,
-      installment_id: installmentId,
+      installment_id: installmentId ?? null,
       amount_paid: amountPaid,
       payment_method: paymentMethod || 'cash',
       principal_applied: totalApplied,
       change_returned: totalChange,
       created_at: new Date().toISOString(),
     });
-
     if (payError) throw payError;
 
-    // 6️⃣ Obtener préstamo actualizado con cuotas
-    const { data: updatedLoan } = await supabase
+    // 7   Devolver Préstamo actualizado (misma forma que GET, pero 1  tem)
+    const { data: updated, error: selErr } = await supabase
       .from('loans')
-      .select('*, loan_installments(*)')
+      .select(`
+        id,
+        client_id,
+        loan_number,
+        principal,
+        interest_rate,
+        amount,
+        amount_to_pay,
+        amount_applied,
+        total_pending,
+        total,
+        balance,
+        late_fee,
+        overdue_amount,
+        loan_date,
+        start_date,
+        due_date,
+        created_at,
+        updated_at,
+        status,
+        loan_installments (
+          id,
+          loan_id,
+          installment_number,
+          due_date,
+          principal_amount,
+          interest_amount,
+          paid_amount,
+          late_fee,
+          status,
+          payment_date
+        ),
+        loan_payments (
+          id,
+          loan_id,
+          installment_id,
+          amount_paid,
+          payment_method,
+          principal_applied,
+          change_returned,
+          created_at
+        ),
+        clients (
+          id,
+          name,
+          email
+        )
+      `)
       .eq('id', loanId)
       .single();
+
+    if (selErr) throw selErr;
+
+    const clientData = Array.isArray(updated.clients)
+      ? updated.clients[0] ?? {}
+      : updated.clients ?? {};
+
+    const updatedLoan = {
+      id: updated.id,
+      loanNumber: updated.loan_number,
+      client_id: updated.client_id,
+      client_name: clientData.name ?? '',
+      client_email: clientData.email ?? '',
+      principal: Number(updated.principal) || 0,
+      interestRate: Number(updated.interest_rate) || 0,
+      amount: Number(updated.amount) || 0,
+      amountToPay: Number(updated.amount_to_pay) || 0,
+      amountApplied: Number(updated.amount_applied) || 0,
+      totalPending: Number(updated.total_pending) || 0,
+      total: Number(updated.total) || 0,
+      balance: Number(updated.balance) || 0,
+      lateFee: Number(updated.late_fee) || 0,
+      overdueAmount: Number(updated.overdue_amount) || 0,
+      loanDate: updated.loan_date ? toLocalYYYYMMDD(updated.loan_date) : null,
+      startDate: updated.start_date ? toLocalYYYYMMDD(updated.start_date) : null,
+      dueDate: updated.due_date ? toLocalYYYYMMDD(updated.due_date) : null,
+      createdAt: updated.created_at,
+      updatedAt: updated.updated_at,
+      status: mapLoanStatus(updated.status),
+      installments:
+        (updated.loan_installments ?? []).map((i: any) => ({
+          id: i.id,
+          installmentNumber: i.installment_number,
+          principal_amount: Number(i.principal_amount) || 0,
+          interest_amount: Number(i.interest_amount) || 0,
+          paidAmount: Number(i.paid_amount) || 0,
+          lateFee: Number(i.late_fee) || 0,
+          dueDate: i.due_date,
+          paymentDate: i.payment_date,
+          status: i.status,
+          // compat
+          due_date: i.due_date,
+        })) ?? [],
+      payments:
+        (updated.loan_payments ?? []).map((p: any) => ({
+          id: p.id,
+          installment_id: p.installment_id,
+          amount_paid: Number(p.amount_paid) || 0,
+          payment_method: p.payment_method ?? 'cash',
+          principal_applied: Number(p.principal_applied) || 0,
+          change_returned: Number(p.change_returned) || 0,
+          created_at: p.created_at,
+        })) ?? [],
+    };
+
+    // Actualizar capital con el efectivo neto recibido (amountPaid - cambio devuelto)
+    try {
+      const netCashIn = Number(amountPaid || 0) - Number(totalChange || 0);
+      if (!isNaN(netCashIn) && netCashIn !== 0) {
+        const { data: cap } = await supabase
+          .from('capital')
+          .select('id, total')
+          .eq('id', 1)
+          .maybeSingle();
+        const current = Number(cap?.total ?? 0);
+        await supabase.from('capital').upsert({ id: 1, total: current + netCashIn });
+      }
+    } catch (e) {
+      console.warn('Aviso: no se pudo actualizar capital tras pago:', e);
+    }
 
     return NextResponse.json({
       message: 'Pago procesado correctamente',
       totalApplied,
       totalChange,
       updatedLoan,
+      // Compatibilidad con el cliente
+      loan: updatedLoan,
+      installment: (updatedLoan.installments as any[]).find((x) => x.id === installmentId),
+      totalPending: updatedLoan.totalPending,
+      change: totalChange,
+      principalApplied: totalApplied,
     });
   } catch (error) {
-    console.error('❌ Error procesando pago:', error);
+    console.error('  Error procesando pago:', error);
     return NextResponse.json(
       { error: 'Error procesando pago', details: String(error) },
       { status: 500 }
     );
   }
 }
+
+

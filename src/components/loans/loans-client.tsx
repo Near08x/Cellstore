@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import type { Loan, Client } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -87,15 +87,15 @@ export default function LoansClient({
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [loanToPrint, setLoanToPrint] = useState<Loan | null>(null);
   
-  // 🔹 Estados locales
+  //      Estados locales
   const [loans, setLoans] = useState<Loan[]>(initialLoans);
   const [clients, setClients] = useState<Client[]>(initialClients);
 
   const [isNewLoanOpen, setNewLoanOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
-  const [totalCapital, setTotalCapital] = useState(100000);
+  const [totalCapital, setTotalCapital] = useState(0);
   const [isEditCapitalOpen, setEditCapitalOpen] = useState(false);
-  const [newCapital, setNewCapital] = useState(100000);
+  const [newCapital, setNewCapital] = useState(0);
 
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [clientSearch, setClientSearch] = useState('');
@@ -117,8 +117,24 @@ export default function LoansClient({
   const receiptRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   
-  // ✅ FIXED: fetch estándar sin NEXT_PUBLIC_API_URL (usa rutas internas)
-  useEffect(() => {
+  //     FIXED: fetch est  ndar sin NEXT_PUBLIC_API_URL (usa rutas internas)
+    // Cargar capital actual desde la API
+  const fetchCapital = async () => {
+    try {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
+      const res = await fetch(`${baseUrl}/api/capital`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data?.total === 'number') {
+          setTotalCapital(data.total);
+          setNewCapital(data.total);
+        }
+      }
+    } catch (e) {
+      console.warn('No se pudo cargar capital:', e);
+    }
+  };
+useEffect(() => {
   const fetchLoansAndClients = async () => {
     try {
       const baseUrl =
@@ -137,7 +153,7 @@ export default function LoansClient({
           setClients([]);
           toast({
             title: 'Error',
-            description: 'No se pudieron cargar préstamos/clientes',
+            description: 'No se pudieron cargar Préstamos/clientes',
             variant: 'destructive',
           });
         }
@@ -156,8 +172,8 @@ export default function LoansClient({
     if (!initialLoans?.length || !initialClients?.length) {
       fetchLoansAndClients();
     }
+      fetchCapital();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const handlePrint = () => {
     window.print();
   };
@@ -195,7 +211,7 @@ export default function LoansClient({
   );
   const availableCapital = totalCapital - lentCapital;
 
-// 🔹 Crear préstamo (con refresco y apertura automática)
+//      Crear pr  stamo (con refresco y apertura autom  tica)
 const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
   try {
     const res = await fetch('/api/loans', {
@@ -206,45 +222,62 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
     const data = await res.json();
     if (!res.ok)
-      throw new Error(data.message || data.error || 'Error creando préstamo');
+      throw new Error(data.message || data.error || 'Error creando pr  stamo');
 
-    // ✅ 1. Agregar el nuevo préstamo al estado global
+    //     1. Agregar el nuevo pr  stamo al estado global
     setLoans((prev) => [data, ...prev]);
 
-    // ✅ 2. Si pertenece al cliente seleccionado, refresca su lista
-    if (selectedClient && data.clientId === selectedClient.id) {
-      const baseUrl =
-        typeof window !== 'undefined'
-          ? window.location.origin
-          : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
+    //     2. Si pertenece al cliente seleccionado, refresca su lista
+   if (selectedClient && data.clientId === selectedClient.id) {
+  const baseUrl =
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
 
-      const resLoans = await fetch(`${baseUrl}/api/loans`, { cache: 'no-store' });
-      const jsonLoans = await resLoans.json();
+  try {
+    const resLoans = await fetch(`${baseUrl}/api/loans`, { cache: 'no-store' });
 
-      if (resLoans.ok && Array.isArray(jsonLoans?.loans)) {
-        const filtered = jsonLoans.loans.filter(
-          (loan: Loan) => loan.client_id === selectedClient.id
-        );
-        setClientLoans(filtered);
-
-        // 🔄 Forzar re-render del cliente actual
-        setSelectedClient({
-          ...selectedClient,
-          lastUpdatedAt: Date.now(),
-        } as Client);
-      }
+    //        Verifica que la respuesta sea JSON antes de intentar parsearla
+    if (!resLoans.ok) {
+      console.error('       Error al recargar Préstamos:', resLoans.status);
+      return;
     }
 
-    // ✅ 3. Cerrar modal
+    const text = await resLoans.text();
+    if (!text) {
+      console.warn('       Respuesta vac  a del backend /api/loans');
+      return;
+    }
+
+    const jsonLoans = JSON.parse(text);
+    if (Array.isArray(jsonLoans?.loans)) {
+      const filtered = jsonLoans.loans.filter(
+        (loan: Loan) => loan.client_id === selectedClient.id
+      );
+      setClientLoans(filtered);
+
+      setSelectedClient({
+        ...selectedClient,
+        lastUpdatedAt: Date.now(),
+      } as Client);
+    } else {
+      console.warn('       Estructura inesperada en la respuesta /api/loans');
+    }
+  } catch (fetchErr) {
+    console.error('    Error recargando Préstamos:', fetchErr);
+  }
+}
+
+    //     3. Cerrar modal
     setNewLoanOpen(false);
 
-    // ✅ 4. Mostrar toast confirmando
+    //     4. Mostrar toast confirmando
     toast({
-      title: 'Éxito',
-      description: `Préstamo ${data.loanNumber} añadido correctamente.`,
+      title: '  xito',
+      description: `Pr  stamo ${data.loanNumber} a  adido correctamente.`,
     });
 
-    // ✅ 5. Esperar un poco y abrir automáticamente el préstamo recién creado
+    //     5. Esperar un poco y abrir autom  ticamente el pr  stamo reci  n creado
     setTimeout(() => {
       const element = document.querySelector(`[data-state][value="${data.id}"]`);
       if (element) {
@@ -253,11 +286,13 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
         if (trigger) trigger.click();
       }
     }, 600);
+    // Refrescar capital (ajuste automÃ¡tico si excede lo prestado)
+    fetchCapital();
   } catch (error) {
-    console.error('❌ Error en handleAddLoan:', error);
+    console.error('Error en handleAddLoan:', error);
     toast({
       title: 'Error',
-      description: 'No se pudo añadir el préstamo.',
+      description: 'No se pudo anadir el Préstamo.',
       variant: 'destructive',
     });
   }
@@ -266,12 +301,28 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
 
 
-// 🔹 Preparar edición de préstamo
+//      Preparar edici  n de pr  stamo
 const handleEditLoan = (loan: Loan) => {
   setEditingLoan(loan);
 };
 
-  // 🔹 Actualizar préstamo
+  const handleUpdateCapital = async () => {
+    try {
+      const res = await fetch('/api/capital', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total: Number(newCapital) || 0 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Error actualizando capital');
+      setTotalCapital(Number(data.total) || 0);
+      setEditCapitalOpen(false);
+      toast({ title: ' xito', description: 'Capital actualizado correctamente.' });
+    } catch (e) {
+      toast({ title: 'Error', description: 'No se pudo actualizar el capital.', variant: 'destructive' });
+    }
+  };
+  //      Actualizar pr  stamo
   const handleUpdateLoan = async (updatedLoanData: Loan) => {
     try {
       const res = await fetch('/api/loans', {
@@ -282,7 +333,7 @@ const handleEditLoan = (loan: Loan) => {
 
       const data = await res.json();
       if (!res.ok)
-        throw new Error(data.message || data.error || 'Error actualizando préstamo');
+        throw new Error(data.message || data.error || 'Error actualizando pr  stamo');
 
       setLoans((prev) =>
         prev.map((l) => (l.id === updatedLoanData.id ? data : l))
@@ -290,20 +341,20 @@ const handleEditLoan = (loan: Loan) => {
       setEditingLoan(null);
 
       toast({
-        title: 'Éxito',
-        description: 'Préstamo actualizado correctamente.',
+        title: '  xito',
+        description: 'Pr  stamo actualizado correctamente.',
       });
     } catch (error) {
-      console.error('❌ Error en handleUpdateLoan:', error);
+      console.error('    Error en handleUpdateLoan:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar el préstamo.',
+        description: 'No se pudo actualizar el pr  stamo.',
         variant: 'destructive',
       });
     }
   };
 
-  // 🔹 Eliminar préstamo
+  //      Eliminar pr  stamo
   const handleDeleteLoan = async (loanId: string) => {
     try {
       const res = await fetch('/api/loans', {
@@ -314,95 +365,92 @@ const handleEditLoan = (loan: Loan) => {
 
       const data = await res.json();
       if (!res.ok)
-        throw new Error(data.message || data.error || 'Error eliminando préstamo');
+        throw new Error(data.message || data.error || 'Error eliminando pr  stamo');
 
       setLoans((prev) => prev.filter((loan) => loan.id !== loanId));
 
       toast({
-        title: 'Éxito',
-        description: 'Préstamo eliminado correctamente.',
+        title: '  xito',
+        description: 'Pr  stamo eliminado correctamente.',
       });
     } catch (error) {
-      console.error('❌ Error en handleDeleteLoan:', error);
+      console.error('    Error en handleDeleteLoan:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo eliminar el préstamo.',
+        description: 'No se pudo eliminar el pr  stamo.',
         variant: 'destructive',
       });
     }
   };
 
-  const handleUpdateCapital = async () => {
-    setTotalCapital(newCapital);
-    setEditCapitalOpen(false);
-    toast({
-      title: 'Éxito (Simulado)',
-      description: 'Capital actualizado correctamente.',
-    });
-  };
+  // (eliminado duplicado de handleUpdateCapital; se usa la versiÃ³n superior que persiste en API)
 
-  // ✅ FIXED: reemplazamos parseISO + UTC drift
-  const updateLoanWithLateFees = (loan: Loan): Loan => {
-    let totalLateFee = 0;
-    const updatedInstallments = loan.installments.map((inst) => {
-      let isOverdue = false;
-      if (inst?.dueDate) {
-        const dueDateObj = new Date(inst.dueDate); // ✅ FIXED
-        if (!isNaN(dueDateObj.getTime())) {
-          isOverdue = isPast(dueDateObj) && inst.status !== 'Pagado';
-        } else {
-          console.warn('Fecha inválida en cuota:', inst.dueDate);
-        }
+  //     FIXED: reemplazamos parseISO + UTC drift
+  //     FIXED: prevenir crash si loan.installments es undefined
+const updateLoanWithLateFees = (loan: Loan): Loan => {
+  let totalLateFee = 0;
+
+  const updatedInstallments = (loan.installments ?? []).map((inst) => {
+    let isOverdue = false;
+
+    if (inst?.dueDate) {
+      const dueDateObj = new Date(inst.dueDate);
+      if (!isNaN(dueDateObj.getTime())) {
+        isOverdue = isPast(dueDateObj) && inst.status !== 'Pagado';
+      } else {
+        console.warn('       Fecha inv  lida en cuota:', inst.dueDate);
       }
+    }
 
-      let newLateFee = inst.lateFee ?? 0;
-      let newStatus = inst.status;
+    let newLateFee = inst.lateFee ?? 0;
+    let newStatus = inst.status;
 
-      if (
-        isOverdue &&
-        inst.status !== 'Atrasado' &&
-        inst.status !== 'Parcial' &&
-        (inst.paidAmount ?? 0) === 0
-      ) {
-        const installmentAmount =
-          (inst.principal_amount ?? 0) + (inst.interest_amount ?? 0);
-        newLateFee += installmentAmount * 0.04;
-        newStatus = 'Atrasado';
-      }
+    if (
+      isOverdue &&
+      inst.status !== 'Atrasado' &&
+      inst.status !== 'Parcial' &&
+      (inst.paidAmount ?? 0) === 0
+    ) {
+      const installmentAmount =
+        (inst.principal_amount ?? 0) + (inst.interest_amount ?? 0);
+      newLateFee += installmentAmount * 0.04;
+      newStatus = 'Atrasado';
+    }
 
-      totalLateFee += newLateFee;
-
-      return {
-        ...inst,
-        lateFee: newLateFee,
-        status: newStatus,
-      };
-    });
-
-    const overdueAmount = updatedInstallments
-      .filter((inst) => inst.status === 'Atrasado')
-      .reduce(
-        (acc, inst) =>
-          acc +
-          ((inst.principal_amount ?? 0) +
-            (inst.interest_amount ?? 0) -
-            (inst.paidAmount ?? 0)),
-        0
-      );
-
-    const totalPending =
-      (loan.amountToPay ?? 0) - (loan.amountApplied ?? 0) + totalLateFee;
+    totalLateFee += newLateFee;
 
     return {
-      ...loan,
-      installments: updatedInstallments,
-      lateFee: totalLateFee,
-      overdueAmount,
-      totalPending,
+      ...inst,
+      lateFee: newLateFee,
+      status: newStatus,
     };
-  };
+  });
 
-  // 🔹 Seleccionar cliente
+  const overdueAmount = updatedInstallments
+    .filter((inst) => inst.status === 'Atrasado')
+    .reduce(
+      (acc, inst) =>
+        acc +
+        ((inst.principal_amount ?? 0) +
+          (inst.interest_amount ?? 0) -
+          (inst.paidAmount ?? 0)),
+      0
+    );
+
+  const totalPending =
+    (loan.amountToPay ?? 0) - (loan.amountApplied ?? 0) + totalLateFee;
+
+  return {
+    ...loan,
+    installments: updatedInstallments,
+    lateFee: totalLateFee,
+    overdueAmount,
+    totalPending,
+  };
+};
+
+
+  //      Seleccionar cliente
   const handleSelectClient = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
     if (client) {
@@ -426,7 +474,7 @@ const handleEditLoan = (loan: Loan) => {
     setPayModalOpen(true);
   };
 
-  // 🔹 Procesar pago
+  //      Procesar pago
   const handleProcessPayment = async () => {
     if (!loanToPay || paymentAmount <= 0) return;
     try {
@@ -471,13 +519,15 @@ const handleEditLoan = (loan: Loan) => {
       });
 
       setPayModalOpen(false);
+      // Refrescar capital (los pagos incrementan el capital)
+      fetchCapital();
       setLoanToPay(null);
       setPaymentAmount(0);
       setPaymentMethod('cash');
       setApplyOverpaymentToPrincipal(false);
 
       toast({
-        title: 'Éxito',
+        title: '  xito',
         description: 'Pago procesado correctamente.',
       });
     } catch (error) {
@@ -490,8 +540,8 @@ const handleEditLoan = (loan: Loan) => {
     }
   };
 
-  // ✅ FIXED: corregido filtro (usa client_id)
-  // ✅ recalcula cada vez que loans o selectedClient cambian
+  //     FIXED: corregido filtro (usa client_id)
+  //     recalcula cada vez que loans o selectedClient cambian
 const [clientLoans, setClientLoans] = useState<Loan[]>([]);
 
 useEffect(() => {
@@ -591,7 +641,7 @@ useEffect(() => {
       )}
 
       {/* ======================== */}
-      {/* CLIENTE Y NUEVO PRÉSTAMO */}
+      {/* CLIENTE Y NUEVO PR  STAMO */}
       {/* ======================== */}
       <Card className="no-print">
         <CardHeader>
@@ -648,13 +698,13 @@ useEffect(() => {
                   <Button size="sm" className="h-9 gap-1">
                     <PlusCircle className="h-3.5 w-3.5" />
                     <span className="sr-only sm:not-sr-only sm:whitespace-nowrap">
-                      Nuevo Préstamo
+                      Nuevo Pr  stamo
                     </span>
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-4xl">
                   <DialogHeader>
-                    <DialogTitle>Crear Nuevo Préstamo</DialogTitle>
+                    <DialogTitle>Crear Nuevo Pr  stamo</DialogTitle>
                   </DialogHeader>
                   <NewLoanForm
                     clients={clients}
@@ -685,18 +735,18 @@ useEffect(() => {
         </CardHeader>
 
         {/* ======================== */}
-        {/* LISTADO DE PRÉSTAMOS */}
+        {/* LISTADO DE Préstamos */}
         {/* ======================== */}
         <CardContent>
           {!selectedClient ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="h-12 w-12" />
-              <p className="mt-4">Selecciona un cliente para ver sus préstamos.</p>
+              <p className="mt-4">Selecciona un cliente para ver sus Préstamos.</p>
             </div>
           ) : clientLoans.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <User className="h-12 w-12" />
-              <p className="mt-4">Este cliente no tiene préstamos activos.</p>
+              <p className="mt-4">Este cliente no tiene Préstamos activos.</p>
             </div>
           ) : (
             <Accordion type="single" collapsible className="w-full">
@@ -710,10 +760,11 @@ useEffect(() => {
     {`$${(loan.amount ?? 0).toLocaleString('es-ES', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    })} — ${
-      loan.startDate
-        ? new Date(loan.startDate as string).toLocaleDateString('es-DO')
-        : 'Sin fecha'
+    })}     ${
+      loan.dueDate || loan.due_date
+  ? new Date((loan.dueDate ?? loan.due_date) as string).toLocaleDateString('es-DO')
+  : 'Sin fecha'
+
     }`}
   </p>
 </div>
@@ -750,7 +801,7 @@ useEffect(() => {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => handleEditLoan(loan)}>
-                              Editar Préstamo
+                              Editar Pr  stamo
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
@@ -783,11 +834,11 @@ useEffect(() => {
                           <TableRow key={inst.id || `${loan.id}-${inst.installmentNumber}`}>
                             <TableCell>{inst.installmentNumber}</TableCell>
 
-                            {/* ✅ FIXED: mostrar fecha local segura */}
+                            {/*     FIXED: mostrar fecha local segura */}
                             <TableCell>
                               {inst.dueDate
                                 ? new Date(inst.dueDate).toLocaleDateString('es-DO')
-                                : '—'}
+                                : '   '}
                             </TableCell>
 
                             <TableCell>
@@ -840,12 +891,12 @@ useEffect(() => {
       </Card>
 
       {/* ======================== */}
-      {/* MODAL EDITAR PRÉSTAMO */}
+      {/* MODAL EDITAR PR  STAMO */}
       {/* ======================== */}
       <Dialog open={!!editingLoan} onOpenChange={(isOpen) => !isOpen && setEditingLoan(null)}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Editar Préstamo</DialogTitle>
+            <DialogTitle>Editar Pr  stamo</DialogTitle>
           </DialogHeader>
           {editingLoan && (
             <EditLoanForm loan={editingLoan} clients={clients} onUpdateLoan={handleUpdateLoan} />
@@ -866,25 +917,25 @@ useEffect(() => {
   onPaymentSuccess={async (updatedLoan: Loan) => {
     try {
       if (!updatedLoan || !updatedLoan.id) {
-        console.warn('⚠️ No se recibió un préstamo actualizado válido:', updatedLoan);
+        console.warn('       No se recibi   un pr  stamo actualizado v  lido:', updatedLoan);
         return;
       }
 
-      // ✅ 1. Actualiza el préstamo en memoria
+      //     1. Actualiza el pr  stamo en memoria
       setLoans((prev) =>
         prev.map((loan) =>
           loan.id === updatedLoan.id ? { ...loan, ...updatedLoan } : loan
         )
       );
 
-      // ✅ 2. Si pertenece al cliente seleccionado, fuerza refresco visual
+      //     2. Si pertenece al cliente seleccionado, fuerza refresco visual
       if (selectedClient && updatedLoan.client_id === selectedClient.id) {
         setSelectedClient({
           ...selectedClient,
           lastUpdatedAt: Date.now(),
         } as Client);
 
-        // 🔄 3. Fetch rápido para recargar los préstamos del cliente
+        //      3. Fetch r  pido para recargar los Préstamos del cliente
         const baseUrl =
           typeof window !== 'undefined'
             ? window.location.origin
@@ -899,24 +950,24 @@ useEffect(() => {
           );
           setClientLoans(filtered);
         } else {
-          console.warn('⚠️ No se pudieron recargar los préstamos del cliente');
+          console.warn('       No se pudieron recargar los Préstamos del cliente');
         }
       }
 
-      // ✅ 4. Cierra el modal
+      //     4. Cierra el modal
       setLoanToPay(null);
       setPayModalOpen(false);
 
-      // ✅ 5. Feedback visual
+      //     5. Feedback visual
       toast({
         title: 'Pago procesado',
-        description: `El pago del préstamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
+        description: `El pago del pr  stamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
       });
     } catch (error) {
-      console.error('❌ Error refrescando préstamos tras el pago:', error);
+      console.error('    Error refrescando Préstamos tras el pago:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar la lista de préstamos.',
+        description: 'No se pudo actualizar la lista de Préstamos.',
         variant: 'destructive',
       });
     }
@@ -925,7 +976,7 @@ useEffect(() => {
 
 
       {/* ======================== */}
-      {/* ÁREA IMPRIMIBLE */}
+      {/*   REA IMPRIMIBLE */}
       {/* ======================== */}
       <div className="printable-area absolute left-0 top-0 -z-10 h-0 w-0 overflow-hidden">
         {loanToPrint && <LoanPaymentCardWithPrint loan={loanToPrint} />}
@@ -934,3 +985,9 @@ useEffect(() => {
     </div>
   )
 }
+
+
+
+
+
+
