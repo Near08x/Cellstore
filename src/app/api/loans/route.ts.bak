@@ -67,8 +67,39 @@ async function computeLoanAggregates(loanId: string) {
   return { sumLateFees, overdueAmount, totalPending };
 }
 
-// (late fee persistence function removed).r.n
-// Mapear estados de PrÃƒÆ’Ã‚Â©stamo EN -> ES
+// Aplica mora a cuotas vencidas sin pago (4% de capital+inter�s)
+async function applyLateFeesForOverdue(loanId: string) {
+  const { data: inst, error } = await supabase
+    .from('loan_installments')
+    .select('id, due_date, status, paid_amount, principal_amount, interest_amount, late_fee')
+    .eq('loan_id', loanId);
+
+  if (error) throw error;
+
+  for (const i of inst ?? []) {
+    const due = i.due_date ? new Date(i.due_date) : null;
+    const isOver = !!due && !isNaN(due.getTime()) && due < new Date(todayLocal());
+    const alreadyPaid = Number(i.paid_amount ?? 0) > 0;
+    const alreadyLate = (i.status ?? '') === 'Atrasado';
+
+    if (isOver && !alreadyPaid) {
+      const base = Number(i.principal_amount ?? 0) + Number(i.interest_amount ?? 0);
+      const currentLate = Number(i.late_fee ?? 0);
+      const computedLate = base * 0.04; // regla usada en el cliente
+      const newLate = currentLate > 0 ? currentLate : computedLate;
+
+      await supabase
+        .from('loan_installments')
+        .update({
+          late_fee: newLate,
+          status: alreadyLate ? i.status : 'Atrasado',
+        })
+        .eq('id', i.id);
+    }
+  }
+}
+
+// Mapear estados de Pr�stamo EN -> ES
 function mapLoanStatus(status?: string | null): string {
   const s = (status || '').toLowerCase();
   switch (s) {
@@ -112,7 +143,7 @@ type LoanInput = {
 };
 
 // =======================
-// GET: listar PrÃƒÆ’Ã‚Â©stamos completos (con cliente, cuotas y pagos)
+// GET: listar Pr�stamos completos (con cliente, cuotas y pagos)
 // =======================
 export async function GET() {
   try {
@@ -244,7 +275,7 @@ export async function GET() {
 }
 
 // =======================
-// POST: carear PrÃƒÆ’Ã‚Â©stamo (usa start_date y calcula due_date)
+// POST: carear Pr�stamo (usa start_date y calcula due_date)
 // =======================
 export async function POST(request: Request) {
   try {
@@ -253,7 +284,7 @@ export async function POST(request: Request) {
 
     if (!loanData.client_id) {
       return NextResponse.json(
-        { message: 'Debe seleccionar un cliente v lido para carear un PrÃƒÆ’Ã‚Â©stamo' },
+        { message: 'Debe seleccionar un cliente v lido para carear un Pr�stamo' },
         { status: 400 }
       );
     }
@@ -338,7 +369,7 @@ export async function POST(request: Request) {
       }));
     }
 
-    // Recalcular mora, vencidos y saldo pendiente desde cuotas reciÃƒÆ’Ã‚Â©n insertadas
+    // Recalcular mora, vencidos y saldo pendiente desde cuotas reci�n insertadas
     const { sumLateFees, overdueAmount, totalPending } = await computeLoanAggregates(loan.id);
 
     await supabase
@@ -351,26 +382,22 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', loan.id);
-    // Actualizar capital disponible al crear préstamo
-    // Si principal > disponible, aumentar disponible por el excedente (principal - disponible)
-    // Si principal <= disponible, restar normalmente
+
+    // Ajuste autom�tico del capital si el total prestado supera el capital registrado
     try {
+      const { data: allLoans } = await supabase.from('loans').select('amount');
+      const lentSum = (allLoans ?? []).reduce((acc: number, r: any) => acc + Number(r.amount || 0), 0);
       const { data: cap } = await supabase
         .from('capital')
         .select('id, total')
         .eq('id', 1)
         .maybeSingle();
-      const current = Number(cap?.total ?? 0);
-      let newTotal: number;
-      if (current >= principal) {
-        newTotal = current - principal;
-      } else {
-        const excedente = principal - current;
-        newTotal = excedente; // crece por el excedente
+      const currentTotal = Number(cap?.total ?? 0);
+      if (lentSum > currentTotal) {
+        await supabase.from('capital').upsert({ id: 1, total: lentSum });
       }
-      await supabase.from('capital').upsert({ id: 1, total: newTotal });
     } catch (e) {
-      console.warn('Aviso: no se pudo actualizar capital disponible tras crear prestamo:', e);
+      console.warn('Aviso: no se pudo recalcular capital autom ticamente:', e);
     }
 
     return NextResponse.json({
@@ -396,15 +423,15 @@ export async function POST(request: Request) {
       payments: [],
     });
   } catch (error) {
-    console.error('  Error careando PrÃƒÆ’Ã‚Â©stamo:', error);
+    console.error('  Error careando Pr�stamo:', error);
     return NextResponse.json(
-      { message: 'Error careando PrÃƒÆ’Ã‚Â©stamo', error: String(error) },
+      { message: 'Error careando Pr�stamo', error: String(error) },
       { status: 500 }
     );
   }
 }
 // =======================
-// PUT: actualizar PrÃƒÆ’Ã‚Â©stamo (recalcula totales y due_date)
+// PUT: actualizar Pr�stamo (recalcula totales y due_date)
 // =======================
 export async function PUT(request: Request) {
   try {
@@ -484,7 +511,7 @@ export async function PUT(request: Request) {
       if (instError) throw instError;
     }
 
-    // Responder con PrÃƒÆ’Ã‚Â©stamo completo (mismo shape que GET)
+    // Responder con Pr�stamo completo (mismo shape que GET)
     // Recalcular mora, vencidos y saldo pendiente desde cuotas
     try {
       const { sumLateFees, overdueAmount, totalPending } = await computeLoanAggregates(id);
@@ -608,7 +635,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('  Error actualizando PrÃƒÆ’Ã‚Â©stamo:', error);
+    console.error('  Error actualizando Pr�stamo:', error);
     return NextResponse.json({ message: 'Error updating loan', error: String(error) }, { status: 500 });
   }
 }
@@ -649,14 +676,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Faltan datos para procesar el pago' }, { status: 400 });
     }
 
-    // 1   Obtener PrÃƒÆ’Ã‚Â©stamo con cuotas
+    // 1   Obtener Pr�stamo con cuotas
     const { data: loan, error: loanError } = await supabase
       .from('loans')
       .select('*, loan_installments(*)')
       .eq('id', loanId)
       .single();
 
-    if (loanError || !loan) throw loanError || new Error('PrÃƒÆ’Ã‚Â©stamo no encontrado');
+    if (loanError || !loan) throw loanError || new Error('Pr�stamo no encontrado');
 
     let remainingPayment = Number(amountPaid);
     const installments = [...(loan.loan_installments || [])].sort(
@@ -723,7 +750,7 @@ export async function PATCH(request: Request) {
     // 4   Recalcular mora, vencidos y saldo pendiente
     const { sumLateFees, overdueAmount, totalPending } = await computeLoanAggregates(loanId);
 
-    // 5   Actualizar PrÃƒÆ’Ã‚Â©stamo principal
+    // 5   Actualizar Pr�stamo principal
     const totalPagado = Number(loan.amount_applied ?? 0) + totalApplied;
     const totalPendiente = totalPending;
     const statusFinal = totalPendiente <= 0 ? 'Pagado' : loan.status;
@@ -755,7 +782,7 @@ export async function PATCH(request: Request) {
     });
     if (payError) throw payError;
 
-    // 7   Devolver PrÃƒÆ’Ã‚Â©stamo actualizado (misma forma que GET, pero 1  tem)
+    // 7   Devolver Pr�stamo actualizado (misma forma que GET, pero 1  tem)
     const { data: updated, error: selErr } = await supabase
       .from('loans')
       .select(`

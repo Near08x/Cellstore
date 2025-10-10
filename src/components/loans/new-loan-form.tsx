@@ -86,8 +86,9 @@ const calculateInstallments = (
       addPeriod = addMonths;
       break;
     case 'quincenal':
+      // Quincenal: 24 periodos/año (aprox cada 15 días)
       paymentFrequencyPerYear = 24;
-      addPeriod = (date, count) => addWeeks(date, count * 2);
+      addPeriod = (date, count) => addDays(date, count * 15);
       break;
     case 'semanal':
       paymentFrequencyPerYear = 52;
@@ -104,28 +105,59 @@ const calculateInstallments = (
   const ratePerPeriod = annualRate / paymentFrequencyPerYear;
 
   if (loanType === 'amortization') {
-    const installmentAmount =
-      (principal * ratePerPeriod * Math.pow(1 + ratePerPeriod, term)) /
-      (Math.pow(1 + ratePerPeriod, term) - 1);
-    let remainingBalance = principal;
+    // Manejar caso tasa 0 para evitar división por cero
+    if (ratePerPeriod === 0) {
+      const flat = principal / term;
+      for (let i = 1; i <= term; i++) {
+        const last = i === term;
+        // Ajuste de redondeo en la última cuota para cerrar exactamente el principal
+        const principalPayment = Number((last ? principal - flat * (term - 1) : flat).toFixed(2));
+        const dueDate: Date = addPeriod(new Date(startDate), i);
+        installments.push({
+          installmentNumber: i,
+          principal_amount: principalPayment,
+          interest_amount: 0,
+          paidAmount: 0,
+          paymentDate: undefined,
+          status: 'Pendiente',
+          lateFee: 0,
+          dueDate: toYYYYMMDD(dueDate),
+        });
+      }
+    } else {
+      const pow = Math.pow(1 + ratePerPeriod, term);
+      const installmentAmount = (principal * ratePerPeriod * pow) / (pow - 1);
+      let remainingBalance = principal;
 
-    for (let i = 1; i <= term; i++) {
-      const interest = remainingBalance * ratePerPeriod;
-      const principalPayment = installmentAmount - interest;
-      remainingBalance -= principalPayment;
+      for (let i = 1; i <= term; i++) {
+        let interest = remainingBalance * ratePerPeriod;
+        let principalPayment = installmentAmount - interest;
 
-      const dueDate: Date = addPeriod(new Date(startDate), i);
+        // Redondeo a 2 decimales por cuota
+        interest = Number(interest.toFixed(2));
+        principalPayment = Number(principalPayment.toFixed(2));
 
-      installments.push({
-        installmentNumber: i,
-        principal_amount: Number(principalPayment.toFixed(2)),
-        interest_amount: Number(interest.toFixed(2)),
-        paidAmount: 0,
-        paymentDate: undefined,
-        status: 'Pendiente',
-        lateFee: 0,
-        dueDate: toYYYYMMDD(dueDate),
-      });
+        // En la última cuota, ajustar el principal para cerrar el saldo
+        if (i === term) {
+          principalPayment = Number(remainingBalance.toFixed(2));
+          interest = Number((installmentAmount - principalPayment).toFixed(2));
+        }
+
+        remainingBalance = Number((remainingBalance - principalPayment).toFixed(2));
+
+        const dueDate: Date = addPeriod(new Date(startDate), i);
+
+        installments.push({
+          installmentNumber: i,
+          principal_amount: principalPayment,
+          interest_amount: interest,
+          paidAmount: 0,
+          paymentDate: undefined,
+          status: 'Pendiente',
+          lateFee: 0,
+          dueDate: toYYYYMMDD(dueDate),
+        });
+      }
     }
   } else {
     const totalInterest = principal * annualRate;

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 import type { Loan, Client } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -93,7 +93,7 @@ export default function LoansClient({
 
   const [isNewLoanOpen, setNewLoanOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
-  const [totalCapital, setTotalCapital] = useState(0);
+  const [availableCapital, setAvailableCapital] = useState(0);
   const [isEditCapitalOpen, setEditCapitalOpen] = useState(false);
   const [newCapital, setNewCapital] = useState(0);
 
@@ -126,7 +126,7 @@ export default function LoansClient({
       if (res.ok) {
         const data = await res.json();
         if (typeof data?.total === 'number') {
-          setTotalCapital(data.total);
+          setAvailableCapital(data.total);
           setNewCapital(data.total);
         }
       }
@@ -153,7 +153,7 @@ useEffect(() => {
           setClients([]);
           toast({
             title: 'Error',
-            description: 'No se pudieron cargar Préstamos/clientes',
+            description: 'No se pudieron cargar PrÃ©stamos/clientes',
             variant: 'destructive',
           });
         }
@@ -205,11 +205,21 @@ useEffect(() => {
     }
   }, [loanToPay, dueAmount]);
 
-  const lentCapital = (Array.isArray(loans) ? loans : []).reduce(
-    (acc, loan) => acc + (loan?.amount ?? 0),
-    0
-  );
-  const availableCapital = totalCapital - lentCapital;
+  // Capital prestado (solo capital pendiente):
+  // suma de principal restante por cuota: max(0, principal - max(0, paid - interest - lateFee))
+  const lentCapital = (Array.isArray(loans) ? loans : []).reduce((acc, loan) => {
+    const principalRemaining = (loan.installments ?? []).reduce((sum, inst) => {
+      const paid = Number(inst.paidAmount ?? 0);
+      const interest = Number(inst.interest_amount ?? 0);
+      const fee = Number(inst.lateFee ?? 0);
+      const principal = Number(inst.principal_amount ?? 0);
+      const paidTowardsPrincipal = Math.max(0, paid - interest - fee);
+      const remainingPrincipal = Math.max(0, principal - paidTowardsPrincipal);
+      return sum + remainingPrincipal;
+    }, 0);
+    return acc + principalRemaining;
+  }, 0);
+  const totalCapital = lentCapital + availableCapital;
 
 //      Crear pr  stamo (con refresco y apertura autom  tica)
 const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
@@ -224,8 +234,9 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
     if (!res.ok)
       throw new Error(data.message || data.error || 'Error creando prestamo');
 
-    //     1. Agregar el nuevo pr  stamo al estado global
-    setLoans((prev) => [data, ...prev]);
+    //     1. Agregar el nuevo pr  stamo al estado global (con mora calculada si aplica)
+    const enriched = updateLoanWithLateFees(data as Loan);
+    setLoans((prev) => [enriched, ...prev]);
 
     //     2. Si pertenece al cliente seleccionado, refresca su lista
    if (selectedClient && data.clientId === selectedClient.id) {
@@ -239,7 +250,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
     //        Verifica que la respuesta sea JSON antes de intentar parsearla
     if (!resLoans.ok) {
-      console.error('       Error al recargar Préstamos:', resLoans.status);
+      console.error('       Error al recargar PrÃ©stamos:', resLoans.status);
       return;
     }
 
@@ -264,7 +275,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
       console.warn('       Estructura inesperada en la respuesta /api/loans');
     }
   } catch (fetchErr) {
-    console.error('    Error recargando Préstamos:', fetchErr);
+    console.error('    Error recargando PrÃ©stamos:', fetchErr);
   }
 }
 
@@ -273,7 +284,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
     //     4. Mostrar toast confirmando
     toast({
-      title: '  xito',
+      title: 'Exito',
       description: `Prestamo ${data.loanNumber} a  adido correctamente.`,
     });
 
@@ -286,13 +297,13 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
         if (trigger) trigger.click();
       }
     }, 600);
-    // Refrescar capital (ajuste automÃ¡tico si excede lo prestado)
+    // Refrescar capital (ajuste automÃƒÂ¡tico si excede lo prestado)
     fetchCapital();
   } catch (error) {
     console.error('Error en handleAddLoan:', error);
     toast({
       title: 'Error',
-      description: 'No se pudo anadir el Préstamo.',
+      description: 'No se pudo anadir el PrÃ©stamo.',
       variant: 'destructive',
     });
   }
@@ -315,9 +326,9 @@ const handleEditLoan = (loan: Loan) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.message || 'Error actualizando capital');
-      setTotalCapital(Number(data.total) || 0);
+      setAvailableCapital(Number(data.total) || 0);
       setEditCapitalOpen(false);
-      toast({ title: ' xito', description: 'Capital actualizado correctamente.' });
+      toast({ title: 'Exito', description: 'Capital disponible actualizado correctamente.' });
     } catch (e) {
       toast({ title: 'Error', description: 'No se pudo actualizar el capital.', variant: 'destructive' });
     }
@@ -341,7 +352,7 @@ const handleEditLoan = (loan: Loan) => {
       setEditingLoan(null);
 
       toast({
-        title: '  xito',
+        title: 'Exito',
         description: 'Prestamo actualizado correctamente.',
       });
     } catch (error) {
@@ -370,7 +381,7 @@ const handleEditLoan = (loan: Loan) => {
       setLoans((prev) => prev.filter((loan) => loan.id !== loanId));
 
       toast({
-        title: '  xito',
+        title: 'Exito',
         description: 'Prestamo eliminado correctamente.',
       });
     } catch (error) {
@@ -383,7 +394,7 @@ const handleEditLoan = (loan: Loan) => {
     }
   };
 
-  // (eliminado duplicado de handleUpdateCapital; se usa la versiÃ³n superior que persiste en API)
+  // (eliminado duplicado de handleUpdateCapital; se usa la versiÃƒÂ³n superior que persiste en API)
 
   //     FIXED: reemplazamos parseISO + UTC drift
   //     FIXED: prevenir crash si loan.installments es undefined
@@ -398,7 +409,7 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
       if (!isNaN(dueDateObj.getTime())) {
         isOverdue = isPast(dueDateObj) && inst.status !== 'Pagado';
       } else {
-        console.warn('       Fecha inv  lida en cuota:', inst.dueDate);
+        console.warn('       Fecha invÃ¡lida en cuota:', inst.dueDate);
       }
     }
 
@@ -426,19 +437,34 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
     };
   });
 
-  const overdueAmount = updatedInstallments
-    .filter((inst) => inst.status === 'Atrasado')
-    .reduce(
-      (acc, inst) =>
-        acc +
-        ((inst.principal_amount ?? 0) +
-          (inst.interest_amount ?? 0) -
-          (inst.paidAmount ?? 0)),
-      0
-    );
+  // Calcular importe vencido y pendiente desde cuotas (capital + interÃ©s + mora - pagado)
+  const overdueAmount = updatedInstallments.reduce((acc, inst) => {
+    const principal = Number(inst.principal_amount ?? 0);
+    const interest = Number(inst.interest_amount ?? 0);
+    const fee = Number(inst.lateFee ?? 0);
+    const paid = Number(inst.paidAmount ?? 0);
+    const cuotaTotal = principal + interest + fee;
+    const pendiente = Math.max(cuotaTotal - paid, 0);
+    return acc + (inst.status === 'Atrasado' ? pendiente : 0);
+  }, 0);
 
-  const totalPending =
-    (loan.amountToPay ?? 0) - (loan.amountApplied ?? 0) + totalLateFee;
+  const totalPending = updatedInstallments.reduce((acc, inst) => {
+    const principal = Number(inst.principal_amount ?? 0);
+    const interest = Number(inst.interest_amount ?? 0);
+    const fee = Number(inst.lateFee ?? 0);
+    const paid = Number(inst.paidAmount ?? 0);
+    const cuotaTotal = principal + interest + fee;
+    const pendiente = Math.max(cuotaTotal - paid, 0);
+    return acc + pendiente;
+  }, 0);
+
+  // Estado del prÃ©stamo derivado
+  let derivedStatus: Loan['status'] = loan.status ?? 'Pendiente';
+  if (totalPending <= 1e-6) {
+    derivedStatus = 'Pagado';
+  } else if (updatedInstallments.some((i) => i.status === 'Atrasado')) {
+    derivedStatus = 'Atrasado';
+  }
 
   return {
     ...loan,
@@ -446,6 +472,7 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
     lateFee: totalLateFee,
     overdueAmount,
     totalPending,
+    status: derivedStatus,
   };
 };
 
@@ -527,7 +554,7 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
       setApplyOverpaymentToPrincipal(false);
 
       toast({
-        title: '  xito',
+        title: 'Exito',
         description: 'Pago procesado correctamente.',
       });
     } catch (error) {
@@ -612,16 +639,14 @@ useEffect(() => {
               </DialogTrigger>
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                  <DialogTitle>Modificar Capital Total</DialogTitle>
+                  <DialogTitle>Modificar Capital Disponible</DialogTitle>
                   <DialogDescription>
-                    Actualiza el capital total disponible para operar.
+                    Actualiza el capital disponible (guardado en la base de datos).
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="capital" className="text-right">
-                      Capital
-                    </Label>
+                    <Label htmlFor="capital" className="text-right">Capital Disponible</Label>
                     <Input
                       id="capital"
                       type="number"
@@ -735,18 +760,18 @@ useEffect(() => {
         </CardHeader>
 
         {/* ======================== */}
-        {/* LISTADO DE Préstamos */}
+        {/* LISTADO DE PrÃ©stamos */}
         {/* ======================== */}
         <CardContent>
           {!selectedClient ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="h-12 w-12" />
-              <p className="mt-4">Selecciona un cliente para ver sus Préstamos.</p>
+              <p className="mt-4">Selecciona un cliente para ver sus PrÃ©stamos.</p>
             </div>
           ) : clientLoans.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <User className="h-12 w-12" />
-              <p className="mt-4">Este cliente no tiene Préstamos activos.</p>
+              <p className="mt-4">Este cliente no tiene PrÃ©stamos activos.</p>
             </div>
           ) : (
             <Accordion type="single" collapsible className="w-full">
@@ -770,18 +795,32 @@ useEffect(() => {
 </div>
 
                       <div className="text-right">
-                        <p className="font-semibold text-destructive">
-                          {`Pendiente: $${(loan.totalPending ?? 0).toLocaleString('es-ES', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}`}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {`Pagado: $${(loan.amountApplied ?? 0).toLocaleString('es-ES', {
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          })}`}
-                        </p>
+                        {((loan.totalPending ?? 0) <= 1e-6 || loan.status === 'Pagado') ? (
+                          <>
+                            <p className="font-semibold text-green-600">Saldado</p>
+                            <p className="text-sm text-muted-foreground">
+                              {`Pagado: $${(loan.amountApplied ?? 0).toLocaleString('es-ES', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-semibold text-destructive">
+                              {`Pendiente: $${Math.max(0, loan.totalPending ?? 0).toLocaleString('es-ES', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {`Pagado: $${(loan.amountApplied ?? 0).toLocaleString('es-ES', {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              })}`}
+                            </p>
+                          </>
+                        )}
                       </div>
                     </div>
                   </AccordionTrigger>
@@ -821,7 +860,7 @@ useEffect(() => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>#</TableHead>
-                          <TableHead>Fecha Límite</TableHead>
+                          <TableHead>Fecha LÃ­mite</TableHead>
                           <TableHead>Capital</TableHead>
                           <TableHead>Intereses</TableHead>
                           <TableHead>Abonado</TableHead>
@@ -935,7 +974,7 @@ useEffect(() => {
           lastUpdatedAt: Date.now(),
         } as Client);
 
-        //      3. Fetch r  pido para recargar los Préstamos del cliente
+        //      3. Fetch r  pido para recargar los PrÃ©stamos del cliente
         const baseUrl =
           typeof window !== 'undefined'
             ? window.location.origin
@@ -950,24 +989,57 @@ useEffect(() => {
           );
           setClientLoans(filtered);
         } else {
-          console.warn('       No se pudieron recargar los Préstamos del cliente');
+          console.warn('       No se pudieron recargar los PrÃ©stamos del cliente');
         }
       }
 
-      //     4. Cierra el modal
+      //     4. Refresca capital disponible/total
+      try {
+        const baseUrl =
+          typeof window !== 'undefined'
+            ? window.location.origin
+            : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:9002';
+        const capRes = await fetch(`${baseUrl}/api/capital`, { cache: 'no-store' });
+        const cap = await capRes.json();
+        if (capRes.ok && typeof cap?.total === 'number') {
+          setAvailableCapital(Number(cap.total));
+        }
+      } catch {}
+
+      //     5. Imprimir recibo térmico (si está configurado)
+      try {
+        await fetch('/api/print/payment', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyName: 'CellStore POS',
+            loanNumber: updatedLoan.loanNumber,
+            clientName: updatedLoan.client_name,
+            clientEmail: updatedLoan.client_email,
+            paymentDate: new Date().toLocaleString('es-DO'),
+            amountPaid: paymentAmount,
+            principalApplied: 0,
+            changeReturned: 0,
+            totalPending: updatedLoan.totalPending,
+            cashier: (typeof window !== 'undefined' && localStorage.getItem('app_user')) ? JSON.parse(localStorage.getItem('app_user') as string)?.username : '',
+          }),
+        });
+      } catch {}
+
+      //     6. Cierra el modal
       setLoanToPay(null);
       setPayModalOpen(false);
 
-      //     5. Feedback visual
+      //     7. Feedback visual
       toast({
         title: 'Pago procesado',
         description: `El pago del prestamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
       });
     } catch (error) {
-      console.error('    Error refrescando Préstamos tras el pago:', error);
+      console.error('    Error refrescando PrÃ©stamos tras el pago:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar la lista de Préstamos.',
+        description: 'No se pudo actualizar la lista de PrÃ©stamos.',
         variant: 'destructive',
       });
     }
@@ -985,9 +1057,4 @@ useEffect(() => {
     </div>
   )
 }
-
-
-
-
-
 
