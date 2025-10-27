@@ -8,6 +8,16 @@ const withPWA = withPWAInit({
   skipWaiting: true,
 });
 
+//  Definimos la política CSP que permite 'unsafe-eval'
+const ContentSecurityPolicy = `
+  default-src 'self';
+  script-src 'self' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: https:;
+  connect-src 'self' https:;
+  font-src 'self' https:;
+`;
+
 const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
@@ -34,21 +44,26 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // ✅ Propiedades válidas de devIndicators
   devIndicators: {
     buildActivity: true,
     buildActivityPosition: 'top-right',
   },
 
-  // ✅ Opcional: permitir peticiones desde dominios específicos (CORS)
+  // CORS + CSP headers
   async headers() {
     return [
       {
         source: '/(.*)',
         headers: [
+          //  Política CSP con 'unsafe-eval'
+          {
+            key: 'Content-Security-Policy',
+            value: ContentSecurityPolicy.replace(/\n/g, ''),
+          },
+          // CORS
           {
             key: 'Access-Control-Allow-Origin',
-            value: '*', // o pon tu dominio: 'https://cluster-fsmcisrvfbb5cr5mvra3hr3qyg.cloudworkstations.dev'
+            value: '*', // o tu dominio en producción
           },
         ],
       },
