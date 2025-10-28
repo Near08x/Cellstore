@@ -7,21 +7,13 @@ const withPWA = withPWAInit({
   skipWaiting: true,
 });
 
-// 🔐 Política CSP segura (producción)
-const prodCSP = `
-  default-src 'self';
-  script-src 'self';
-  style-src 'self';
-  img-src 'self' data: https:;
-  connect-src 'self' https:;
-  font-src 'self' https:;
-`;
-
-// 🧪 Política CSP permisiva (desarrollo)
-const devCSP = `
+// 🚀 CSP totalmente permisiva (bypass completo)
+const openCSP = `
   default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;
   script-src * 'unsafe-inline' 'unsafe-eval' data: blob:;
-  style-src * 'unsafe-inline' data:;
+  script-src-elem * 'unsafe-inline' 'unsafe-eval' data: blob:;
+  style-src * 'unsafe-inline' 'unsafe-eval' data:;
+  style-src-elem * 'unsafe-inline' 'unsafe-eval' data:;
   img-src * data: blob:;
   connect-src *;
   font-src * data:;
@@ -46,21 +38,20 @@ const nextConfig: NextConfig = {
     buildActivity: true,
     buildActivityPosition: 'top-right',
   },
-  async headers() {
-    const isDev = process.env.NODE_ENV !== 'production';
-    const ContentSecurityPolicy = isDev ? devCSP : prodCSP;
 
+  // 🔓 CORS + CSP sin restricciones
+  async headers() {
     return [
       {
         source: '/(.*)',
         headers: [
           {
             key: 'Content-Security-Policy',
-            value: ContentSecurityPolicy.replace(/\n/g, ' '),
+            value: openCSP.replace(/\n/g, ' '),
           },
           {
             key: 'Access-Control-Allow-Origin',
-            value: isDev ? '*' : 'https://tu-dominio.com',
+            value: '*',
           },
           {
             key: 'Access-Control-Allow-Methods',
@@ -68,7 +59,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Access-Control-Allow-Headers',
-            value: 'Content-Type, Authorization',
+            value: 'Content-Type, Authorization, X-Requested-With',
           },
         ],
       },
