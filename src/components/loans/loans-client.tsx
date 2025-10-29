@@ -153,7 +153,7 @@ useEffect(() => {
           setClients([]);
           toast({
             title: 'Error',
-            description: 'No se pudieron cargar PrÃ©stamos/clientes',
+            description: 'No se pudieron cargar PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos/clientes',
             variant: 'destructive',
           });
         }
@@ -250,7 +250,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
 
     //        Verifica que la respuesta sea JSON antes de intentar parsearla
     if (!resLoans.ok) {
-      console.error('       Error al recargar PrÃ©stamos:', resLoans.status);
+      console.error('       Error al recargar PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos:', resLoans.status);
       return;
     }
 
@@ -275,7 +275,7 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
       console.warn('       Estructura inesperada en la respuesta /api/loans');
     }
   } catch (fetchErr) {
-    console.error('    Error recargando PrÃ©stamos:', fetchErr);
+    console.error('    Error recargando PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos:', fetchErr);
   }
 }
 
@@ -297,13 +297,13 @@ const handleAddLoan = async (newLoanData: Omit<Loan, 'id'>) => {
         if (trigger) trigger.click();
       }
     }, 600);
-    // Refrescar capital (ajuste automÃƒÂ¡tico si excede lo prestado)
+    // Refrescar capital (ajuste automÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡tico si excede lo prestado)
     fetchCapital();
   } catch (error) {
     console.error('Error en handleAddLoan:', error);
     toast({
       title: 'Error',
-      description: 'No se pudo anadir el PrÃ©stamo.',
+      description: 'No se pudo anadir el PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamo.',
       variant: 'destructive',
     });
   }
@@ -394,7 +394,7 @@ const handleEditLoan = (loan: Loan) => {
     }
   };
 
-  // (eliminado duplicado de handleUpdateCapital; se usa la versiÃƒÂ³n superior que persiste en API)
+  // (eliminado duplicado de handleUpdateCapital; se usa la versiÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³n superior que persiste en API)
 
   //     FIXED: reemplazamos parseISO + UTC drift
   //     FIXED: prevenir crash si loan.installments es undefined
@@ -409,7 +409,7 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
       if (!isNaN(dueDateObj.getTime())) {
         isOverdue = isPast(dueDateObj) && inst.status !== 'Pagado';
       } else {
-        console.warn('       Fecha invÃ¡lida en cuota:', inst.dueDate);
+        console.warn('       Fecha invÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lida en cuota:', inst.dueDate);
       }
     }
 
@@ -437,7 +437,7 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
     };
   });
 
-  // Calcular importe vencido y pendiente desde cuotas (capital + interÃ©s + mora - pagado)
+  // Calcular importe vencido y pendiente desde cuotas (capital + interés + mora - pagado)
   const overdueAmount = updatedInstallments.reduce((acc, inst) => {
     const principal = Number(inst.principal_amount ?? 0);
     const interest = Number(inst.interest_amount ?? 0);
@@ -458,12 +458,10 @@ const updateLoanWithLateFees = (loan: Loan): Loan => {
     return acc + pendiente;
   }, 0);
 
-  // Estado del prÃ©stamo derivado
-  let derivedStatus: Loan['status'] = loan.status ?? 'Pendiente';
+  // Estado del préstamo derivado (mantener tipos válidos)
+  let derivedStatus: Loan["status"] = loan.status ?? "Pendiente";
   if (totalPending <= 1e-6) {
-    derivedStatus = 'Pagado';
-  } else if (updatedInstallments.some((i) => i.status === 'Atrasado')) {
-    derivedStatus = 'Atrasado';
+    derivedStatus = "Pagado";
   }
 
   return {
@@ -760,18 +758,18 @@ useEffect(() => {
         </CardHeader>
 
         {/* ======================== */}
-        {/* LISTADO DE PrÃ©stamos */}
+        {/* LISTADO DE PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos */}
         {/* ======================== */}
         <CardContent>
           {!selectedClient ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="h-12 w-12" />
-              <p className="mt-4">Selecciona un cliente para ver sus PrÃ©stamos.</p>
+              <p className="mt-4">Selecciona un cliente para ver sus PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos.</p>
             </div>
           ) : clientLoans.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <User className="h-12 w-12" />
-              <p className="mt-4">Este cliente no tiene PrÃ©stamos activos.</p>
+              <p className="mt-4">Este cliente no tiene PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos activos.</p>
             </div>
           ) : (
             <Accordion type="single" collapsible className="w-full">
@@ -860,7 +858,7 @@ useEffect(() => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>#</TableHead>
-                          <TableHead>Fecha LÃ­mite</TableHead>
+                          <TableHead>Fecha LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­mite</TableHead>
                           <TableHead>Capital</TableHead>
                           <TableHead>Intereses</TableHead>
                           <TableHead>Abonado</TableHead>
@@ -974,7 +972,7 @@ useEffect(() => {
           lastUpdatedAt: Date.now(),
         } as Client);
 
-        //      3. Fetch r  pido para recargar los PrÃ©stamos del cliente
+        //      3. Fetch r  pido para recargar los PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos del cliente
         const baseUrl =
           typeof window !== 'undefined'
             ? window.location.origin
@@ -989,7 +987,7 @@ useEffect(() => {
           );
           setClientLoans(filtered);
         } else {
-          console.warn('       No se pudieron recargar los PrÃ©stamos del cliente');
+          console.warn('       No se pudieron recargar los PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos del cliente');
         }
       }
 
@@ -1006,7 +1004,7 @@ useEffect(() => {
         }
       } catch {}
 
-      //     5. Imprimir recibo térmico (si está configurado)
+      //     5. Imprimir recibo tÃƒÆ’Ã‚Â©rmico (si estÃƒÆ’Ã‚Â¡ configurado)
       try {
         await fetch('/api/print/payment', {
           method: 'POST',
@@ -1015,7 +1013,7 @@ useEffect(() => {
             companyName: 'CellStore POS',
             loanNumber: updatedLoan.loanNumber,
             clientName: updatedLoan.client_name,
-            clientEmail: updatedLoan.client_email,
+            clientEmail: ((updatedLoan as any)?.client_email as string | undefined),
             paymentDate: new Date().toLocaleString('es-DO'),
             amountPaid: paymentAmount,
             principalApplied: 0,
@@ -1036,10 +1034,10 @@ useEffect(() => {
         description: `El pago del prestamo ${updatedLoan.loanNumber} fue registrado correctamente.`,
       });
     } catch (error) {
-      console.error('    Error refrescando PrÃ©stamos tras el pago:', error);
+      console.error('    Error refrescando PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos tras el pago:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo actualizar la lista de PrÃ©stamos.',
+        description: 'No se pudo actualizar la lista de PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos.',
         variant: 'destructive',
       });
     }

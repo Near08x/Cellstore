@@ -126,6 +126,11 @@ const ProductCard = ({
 
 export default function PosClient({ products }: { products: Product[] }) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  // Mantener los productos en estado local para poder refrescarlos después de una venta
+  const [localProducts, setLocalProducts] = useState<Product[]>(products);
+  useEffect(() => {
+    setLocalProducts(products);
+  }, [products]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isPaymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
@@ -159,12 +164,12 @@ export default function PosClient({ products }: { products: Product[] }) {
 
   const searchResults = useMemo(() => {
     if (!searchQuery) return [];
-    return products.filter(
+    return localProducts.filter(
       (product) =>
         product.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !cart.some((item) => item.id === product.id)
     );
-  }, [searchQuery, products, cart]);
+  }, [searchQuery, localProducts, cart]);
 
   const handleAddToCart = (product: Product, price: number) => {
     setCart((prevCart) => {
@@ -326,7 +331,7 @@ const handlePrint = () => {
         };
         setCompletedSaleDetails(saleDetails);
 
-        setTimeout(() => {
+        setTimeout(async () => {
           handlePrint();
           setPaymentModalOpen(false);
           setCart([]);
@@ -334,7 +339,16 @@ const handlePrint = () => {
           setPaymentMethod('cash');
           setSelectedClient(null);
           setCompletedSaleDetails(null);
-          // Optionally, refresh products to show updated stock
+          // Refrescar lista de productos desde la API para mostrar stock actualizado
+          try {
+            const resp = await fetch('/api/products');
+            if (resp.ok) {
+              const refreshed: Product[] = await resp.json();
+              setLocalProducts(refreshed);
+            }
+          } catch (e) {
+            console.warn('No se pudo refrescar productos tras venta:', e);
+          }
         }, 100);
 
     } catch (error) {
