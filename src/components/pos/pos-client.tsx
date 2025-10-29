@@ -298,12 +298,20 @@ const handlePrint = () => {
       customerEmail: selectedClient?.email || 'cliente@general.com',
       amount: total,
       date: new Date().toISOString(),
-      items: cart.map(item => ({
-        productId: item.id,
-        quantity: item.quantity,
-        unitPrice: item.selectedPrice,
-        total: item.selectedPrice * item.quantity * (1 - item.discount / 100)
-      }))
+      // Enviar `price` (esperado por el endpoint /api/sales) con el precio unitario aplicado tras descuento.
+      // También incluimos `unitPrice` para compatibilidad y `discount` para auditoría si se necesita.
+      items: cart.map(item => {
+        const discountedUnitPrice = item.selectedPrice * (1 - (item.discount || 0) / 100);
+        return {
+          productId: item.id,
+          quantity: item.quantity,
+          // campo que el servidor espera (price)
+          price: Number(discountedUnitPrice.toFixed(2)),
+          // compatibilidad: precio base antes de descuento
+          unitPrice: Number(item.selectedPrice.toFixed(2)),
+          discount: Number(item.discount || 0),
+        };
+      })
     };
 
     try {

@@ -764,7 +764,7 @@ useEffect(() => {
           {!selectedClient ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <Search className="h-12 w-12" />
-              <p className="mt-4">Selecciona un cliente para ver sus PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos.</p>
+              <p className="mt-4">Selecciona un cliente para ver sus Prestamos.</p>
             </div>
           ) : clientLoans.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
