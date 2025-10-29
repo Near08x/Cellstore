@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseServer'
+import { revalidatePath } from 'next/cache'
 
 type POSItem = {
   productId: string
@@ -199,6 +200,14 @@ export async function POST(request: Request) {
         .eq('id', it.productId)
 
       if (updateErr) throw updateErr
+    }
+
+    // 4) Revalidate POS route so ISR/edge cache updates immediately
+    try {
+      await revalidatePath('/pos')
+    } catch (revalErr) {
+      // log but don't fail the request if revalidation errors
+      console.error('Error revalidating /pos:', revalErr)
     }
 
     return NextResponse.json({
