@@ -4,7 +4,7 @@ Keep these instructions concise and specific to the repository so an AI assistan
 
 ## Quick context
 - Framework: Next.js (App Router) with TypeScript. Source lives under `src/app` (routes, server /api handlers) and UI components under `src/components`.
-- Data: Supabase is used as primary DB (`src/lib/supabaseClient.ts`) and Firebase Firestore is present (`src/lib/firebase.ts`) for some features.
+- Data: Supabase is used as primary DB (`src/lib/supabaseClient.ts`).
 - Scripts: dev uses `next dev --turbopack -p 9002` (see `package.json`) — default dev port is 9002.
 
 ## What frequently comes up (patterns & examples)
@@ -23,7 +23,7 @@ Keep these instructions concise and specific to the repository so an AI assistan
 
 ## Environment & integrations
 - Supabase env vars: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (see `src/lib/supabaseClient.ts`). Don't hardcode keys.
-- Firebase config is present in `src/lib/firebase.ts` — note project-specific values are included in repo; review before changing.
+- (Firebase config removed; all features now use Supabase.)
 - The app enables PWA via `next-pwa` and uses an intentionally permissive CSP/CORS in `next.config.ts`. Be careful when modifying -- the config intentionally relaxes headers for local/dev features.
 
 ## Project-specific conventions

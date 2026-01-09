@@ -67,13 +67,13 @@ const calculateInstallments = (
 };
 
 export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFormProps) {
-  const [installments, setInstallments] = useState<Installment>([] as any);
+  const [installments, setInstallments] = useState<Installment[]>(loan.installments || []);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       loanNumber: loan.loanNumber,
-      client_id: loan.client_id,
+      client_id: loan.client_id ?? '',
       principal: loan.principal,
       interestRate: loan.interestRate,
       startDate: loan.startDate, // ya viene "YYYY-MM-DD"
@@ -122,7 +122,7 @@ export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFo
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <FormField
-                control={form.control}
+                control={form.control as any}
                 name="client_id"
                 render={({ field }) => (
                   <FormItem>
@@ -146,7 +146,7 @@ export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFo
                 )}
               />
               <FormField
-                control={form.control}
+                control={form.control as any}
                 name="loanNumber"
                 render={({ field }) => (
                   <FormItem>
@@ -161,7 +161,7 @@ export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFo
             </div>
 
             <FormField
-              control={form.control}
+              control={form.control as any}
               name="principal"
               render={({ field }) => (
                 <FormItem>
@@ -175,7 +175,7 @@ export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFo
             />
 
             <FormField
-              control={form.control}
+              control={form.control as any}
               name="interestRate"
               render={({ field }) => (
                 <FormItem>
@@ -190,7 +190,7 @@ export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFo
 
             <div className="grid grid-cols-2 gap-4">
               <FormField
-                control={form.control}
+                control={form.control as any}
                 name="startDate"
                 render={({ field }) => (
                   <FormItem>
@@ -203,7 +203,7 @@ export default function EditLoanForm({ loan, clients, onUpdateLoan }: EditLoanFo
                 )}
               />
               <FormField
-                control={form.control}
+                control={form.control as any}
                 name="dueDate"
                 render={({ field }) => (
                   <FormItem>

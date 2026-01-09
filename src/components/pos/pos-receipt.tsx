@@ -19,7 +19,6 @@ const PosReceipt = React.forwardRef<HTMLDivElement, PosReceiptProps>(
     const {
       cart,
       subtotal,
-      tax,
       total,
       paymentMethod,
       amountPaid,
@@ -87,18 +86,10 @@ const PosReceipt = React.forwardRef<HTMLDivElement, PosReceiptProps>(
 
           {/* Totales */}
           <div className="space-y-0.5">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>${subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Impuestos (18%):</span>
-              <span>${tax.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-bold">
-              <span>Total:</span>
-              <span>${total.toFixed(2)}</span>
-            </div>
+            <div className="flex justify-between text-lg font-bold">
+                <span>Total</span>
+                <span>${total.toFixed(2)}</span>
+              </div>
           </div>
 
           <hr className="border-dashed border-t my-1" />

@@ -1,8 +1,10 @@
-'use server'
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseServer'
 import type { Client } from '@/lib/types'
+import { apiHandler, ApiError } from '@/lib/api-handler'
+import { createClientSchema } from '@/schemas'
+import { logger } from '@/lib/logger'
 
 // =======================
 // GET: obtener todos los clientes
@@ -29,44 +31,47 @@ export async function GET() {
 // =======================
 // POST: crear cliente (o devolver existente si ya está)
 // =======================
-export async function POST(request: Request) {
-  try {
-    const client = (await request.json()) as Omit<Client, 'id' | 'created_at'>
+export const POST = apiHandler(async (request) => {
+  const body = await request.json()
+  const client = createClientSchema.parse(body)
 
-    // Verificar si ya existe por email
-    const { data: existing, error: fetchError } = await supabase
-      .from('clients')
-      .select('id, name, email, phone, created_at')
-      .eq('email', client.email)
-      .maybeSingle()
+  logger.info('Creating client', { email: client.email })
 
-    if (fetchError) throw fetchError
+  // Verificar si ya existe por email
+  const { data: existing, error: fetchError } = await supabase
+    .from('clients')
+    .select('id, name, email, phone, created_at')
+    .eq('email', client.email)
+    .maybeSingle()
 
-    if (existing) {
-      return NextResponse.json(existing)
-    }
-
-    const { data, error } = await supabase
-      .from('clients')
-      .insert({
-        name: client.name,
-        email: client.email,
-        phone: client.phone ?? null,
-      })
-      .select('id, name, email, phone, created_at')
-      .single()
-
-    if (error) throw error
-
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Error creating client:', error)
-    return NextResponse.json(
-      { message: 'Error creating client', error },
-      { status: 500 }
-    )
+  if (fetchError) {
+    logger.error('Error checking existing client', { error: fetchError })
+    throw new ApiError('Error checking existing client', 500)
   }
-}
+
+  if (existing) {
+    logger.info('Client already exists', { id: existing.id })
+    return NextResponse.json(existing)
+  }
+
+  const { data, error } = await supabase
+    .from('clients')
+    .insert({
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+    })
+    .select('id, name, email, phone, created_at')
+    .single()
+
+  if (error) {
+    logger.error('Error creating client', { error })
+    throw new ApiError('Error creating client', 500)
+  }
+
+  logger.info('Client created successfully', { id: data.id })
+  return NextResponse.json(data)
+})
 
 // =======================
 // DELETE: eliminar cliente por email

@@ -1,8 +1,9 @@
-'use server'
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseServer'
 import { revalidatePath } from 'next/cache'
+import { logger } from '@/lib/logger'
+import { z } from 'zod'
 
 type POSItem = {
   productId: string
@@ -11,6 +12,19 @@ type POSItem = {
 }
 
 type PaymentMethod = 'cash' | 'card' | 'transfer' | 'mixed'
+
+// Schema de validación para POST
+const createSaleRequestSchema = z.object({
+  items: z.array(z.object({
+    productId: z.string().uuid('ID de producto inválido'),
+    quantity: z.number().int().positive('´La cantidad debe ser mayor a 0'),
+    price: z.number().nonnegative().optional(),
+  })).min(1, 'Debe haber al menos un producto en la venta'),
+  customer_email: z.string().email().optional(),
+  customer_name: z.string().optional(),
+  payment_method: z.enum(['cash', 'card', 'transfer', 'mixed']).optional(),
+  amount_paid: z.number().nonnegative().optional(),
+});
 
 // =======================
 // GET: obtener ventas con cliente y detalles
@@ -80,19 +94,13 @@ export async function GET() {
 // =======================
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
-      items: POSItem[]
-      customer_email?: string
-      customer_name?: string
-      payment_method?: PaymentMethod
-      amount_paid?: number
-    }
+    const body = await request.json()
+    
+    // Validar request
+    const validatedData = createSaleRequestSchema.parse(body)
+    const { items, customer_email, customer_name, payment_method, amount_paid } = validatedData
 
-    const { items, customer_email, customer_name, payment_method, amount_paid } = body
-
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      throw new Error('La venta debe contener al menos un item')
-    }
+    logger.info('Creating sale', { itemCount: items.length, customer_email })
 
     // --- calcular subtotal (usando unit_price) ---
     let subtotal = 0
@@ -123,10 +131,13 @@ export async function POST(request: Request) {
       })
     }
 
-    const TAX_RATE = 0.18
-    const tax = subtotal * TAX_RATE
-    const total = subtotal + tax
-    const amount = total
+    // El subtotal es igual al total ya que los precios incluyen impuestos
+    const total = subtotal
+    const amount = subtotal
+
+    // Calcular el impuesto (18%) a partir del precio que ya incluye impuestos
+    // Fórmula: tax = precioConImpuesto - (precioConImpuesto / 1.18)
+    const tax = Number((total - (total / 1.18)).toFixed(2))
 
     // --- cliente ---
     const emailToSave = customer_email || null
@@ -150,7 +161,7 @@ export async function POST(request: Request) {
         customer_email: emailToSave,
         customer_name: nameToSave,
         subtotal,
-        tax,
+        tax, // 18% calculado del precio que incluye impuestos
         total,
         amount,
         amount_paid: amountPaid,
@@ -207,14 +218,15 @@ export async function POST(request: Request) {
       await revalidatePath('/pos')
     } catch (revalErr) {
       // log but don't fail the request if revalidation errors
-      console.error('Error revalidating /pos:', revalErr)
+      logger.warn('Error revalidating /pos', { error: revalErr })
     }
+
+    logger.info('Sale created successfully', { saleId: sale.id, total })
 
     return NextResponse.json({
       id: sale.id,
       items: itemsWithPrice,
       subtotal,
-      tax,
       total,
       amount,
       amount_paid: amountPaid,
@@ -224,7 +236,7 @@ export async function POST(request: Request) {
       customer_name: nameToSave,
     })
   } catch (error) {
-    console.error('Error creating sale:', error)
+    logger.error('Error creating sale', { error })
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json(
       { message: `Error creating sale: ${errorMessage}`, error },

@@ -26,12 +26,13 @@ export default function RecentSales({ sales }: { sales: Sale[] }) {
             <p className="text-sm font-medium leading-none">{sale.customerName}</p>
             <p className="text-sm text-muted-foreground">{sale.customerEmail}</p>
           </div>
-          <div className="ml-auto font-medium">
-            +$
-            {sale.amount.toLocaleString('es-ES', {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+          <div className="ml-auto text-right">
+            <p className="font-medium">
+              +${sale.subtotal.toLocaleString('es-ES', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </p>
           </div>
         </div>
       ))}

@@ -20,8 +20,8 @@ export type SaleDetail = {
   productId: string;
   quantity: number;
   unitPrice: number;
-  total: number;
-  price: number;
+  price: number;  // Precio unitario aplicado (puede incluir descuentos)
+  total: number;  // Precio total de la línea (quantity * price)
 };
 
 // =========================
@@ -31,7 +31,9 @@ export type Sale = {
   id: string;
   customerName: string;
   customerEmail: string;
-  amount: number;
+  subtotal: number;  // Este es el monto total ya que incluye impuestos
+  amount: number;    // Igual al subtotal, mantenido por compatibilidad
+  tax: number;       // Monto de impuestos calculado (18% del total)
   date: string;
   items: SaleDetail[];
 };
@@ -57,18 +59,18 @@ export type InstallmentStatus =
   | 'Atrasado';
 
 export type Installment = {
-  id: number;                     // SERIAL
+  id?: number | string;                     // SERIAL (may be generated in-memory as string)
   loan_id?: string;               // FK a loans.id
   installmentNumber: number;      // corresponde a installment_number
 
   //    Compatibilidad total con backend
-  due_date: string;               // snake_case (Supabase)
+  due_date?: string;               // snake_case (Supabase)
   dueDate?: string;               // camelCase (Frontend)
   
   principal_amount: number;       // principal_amount
   interest_amount: number;        // interest_amount
-  paidAmount: number;             // paid_amount
-  lateFee: number;                // late_fee
+  paidAmount?: number;             // paid_amount
+  lateFee?: number;                // late_fee
   status: InstallmentStatus;      // estado de la cuota
 
   //    Compatibilidad de fecha de pago
@@ -88,8 +90,11 @@ export type LoanStatus =
 export type Loan = {
   id: string;                     // uuid
   loanNumber: string;             // loan_number
-  client_id: string | null;       // FK a clients.id
+  client_id?: string | null;       // FK a clients.id
   client_name?: string;           // nombre del cliente para UI
+  customerName?: string;          // legacy alias used in some components
+  paymentType?: string;           // optional legacy field
+  loanTerm?: number;              // optional UI helper (number of installments)
 
   // Fechas
   loanDate: string;               // fecha de creación del préstamo

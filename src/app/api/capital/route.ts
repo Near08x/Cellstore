@@ -1,4 +1,3 @@
-'use server';
 
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseServer'; // cliente anon/admin

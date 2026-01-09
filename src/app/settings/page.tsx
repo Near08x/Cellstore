@@ -1,107 +1,51 @@
-'use client';
+export const dynamic = 'force-dynamic';
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import MainLayout from '@/components/main-layout';
-import { useAuth } from '@/hooks/use-auth';
-import UserManagement from '@/components/settings/user-management';
-import { ShieldAlert } from 'lucide-react';
+import SettingsClient from '@/components/settings/settings-client';
 import type { User } from '@/lib/types';
-import { useEffect, useState } from 'react';
-import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/lib/supabaseServer';
+import { cookies } from 'next/headers';
 
 async function getUsers(): Promise<Omit<User, 'passwordHash'>[]> {
-    try {
-        const res = await fetch('/api/users', { cache: 'no-store' });
-        if (!res.ok) throw new Error('Failed to fetch users');
-        return await res.json();
-    } catch (error) {
-        console.error(error);
-        return [];
-    }
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, name, email, role');
+    
+    if (error) throw error;
+    return data ?? [];
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    return [];
+  }
 }
 
-
-export default function SettingsPage() {
-  const { role } = useAuth();
-  const { toast } = useToast();
-  const [users, setUsers] = useState<Omit<User, 'passwordHash'>[]>([]);
-
-  useEffect(() => {
-    async function loadUsers() {
-        if (role === 'admin') {
-            const fetchedUsers = await getUsers();
-            setUsers(fetchedUsers);
-        }
+async function getCurrentUserRole(): Promise<string | null> {
+  try {
+    // Obtener rol desde localStorage (que se almacena en cookies en producción)
+    const cookieStore = await cookies();
+    const roleFromCookie = cookieStore.get('app_role')?.value;
+    
+    if (roleFromCookie) {
+      return roleFromCookie;
     }
-    loadUsers();
-  }, [role]);
 
-  const handleAddUser = async (newUser: Omit<User, 'id' | 'passwordHash'> & {password: string}) => {
-      try {
-        const response = await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newUser),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message ||'Failed to add user');
-
-        setUsers(prev => [...prev, result]);
-        toast({ title: 'Éxito', description: 'Usuario creado correctamente.' });
-      } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'No se pudo crear el usuario.';
-          toast({ title: 'Error', description: errorMessage, variant: 'destructive' });
-      }
-  };
-
-  const handleDeleteUser = async (userId: string) => {
-    try {
-        const response = await fetch('/api/users', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: userId }),
-        });
-        if (!response.ok) throw new Error('Failed to delete user');
-        setUsers(prev => prev.filter(u => u.id !== userId));
-        toast({ title: 'Éxito', description: 'Usuario eliminado correctamente.' });
-    } catch (error) {
-        toast({ title: 'Error', description: 'No se pudo eliminar el usuario.', variant: 'destructive' });
-    }
-  };
-
-  if (role !== 'admin') {
-    return (
-      <MainLayout>
-        <div className="flex h-[70vh] items-center justify-center">
-          <Card className="w-full max-w-md text-center">
-            <CardHeader>
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
-                <ShieldAlert className="h-8 w-8 text-destructive" />
-              </div>
-              <CardTitle>Acceso Denegado</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground">
-                No tienes permisos para acceder a esta sección. Contacta a un administrador.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </MainLayout>
-    );
+    // Fallback: obtener desde localStorage del usuario
+    // En SSR, esto no estará disponible, así que retornamos null
+    return null;
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    return null;
   }
+}
+
+export default async function SettingsPage() {
+  const role = await getCurrentUserRole();
+  const users = role === 'admin' ? await getUsers() : [];
 
   return (
     <MainLayout>
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Configuración</h2>
-          <p className="text-muted-foreground">
-            Gestiona los usuarios y otros ajustes de la aplicación.
-          </p>
-        </div>
-         <UserManagement users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />
-      </div>
+      <SettingsClient users={users} role={role} />
     </MainLayout>
   );
 }

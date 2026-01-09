@@ -1,12 +1,17 @@
+export const revalidate = 60; // Revalidar cada 60 segundos
+
 import MainLayout from '@/components/main-layout';
 import ClientsClient from '@/components/clients/clients-client';
 import type { Client, Sale } from '@/lib/types';
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseServer";
 
 // 🔹 Obtener clientes directo de la tabla "clients"
 async function getClients(): Promise<Client[]> {
   try {
-    const { data, error } = await supabase.from("clients").select("*");
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .order('created_at', { ascending: false });
     if (error) throw error;
     return data ?? [];
   } catch (error) {

@@ -1,10 +1,15 @@
 import type { NextConfig } from 'next';
 import withPWAInit from 'next-pwa';
+import bundleAnalyzer from '@next/bundle-analyzer';
 
 const withPWA = withPWAInit({
   dest: 'public',
   register: true,
   skipWaiting: true,
+});
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
 });
 
 // 🚀 CSP totalmente permisiva (bypass completo)
@@ -21,6 +26,7 @@ const openCSP = `
 `;
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -34,12 +40,22 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'picsum.photos', pathname: '/**' },
     ],
   },
-  devIndicators: {
-    buildActivity: true,
-    buildActivityPosition: 'top-right',
+
+
+  // � Optimizaciones de rendimiento - Fase 1
+  compiler: {
+    // Remover console.log en producción
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'],
+    } : false,
   },
 
-  // 🔓 CORS + CSP sin restricciones
+  experimental: {
+    // Optimizar imports de paquetes grandes
+    optimizePackageImports: ['recharts', 'lucide-react', 'date-fns'],
+  },
+
+  // �🔓 CORS + CSP sin restricciones
   async headers() {
     return [
       {
@@ -67,4 +83,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withPWA(nextConfig);
+export default withBundleAnalyzer(withPWA(nextConfig));

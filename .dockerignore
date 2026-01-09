@@ -1,0 +1,53 @@
+# Git
+.git
+.gitignore
+
+# Dependencies
+# node_modules - commented to allow copying local modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js
+.next
+.next/
+out/
+build/
+
+# Environment files (no copiar .env locales)
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Misc
+README.md
+*.md
+.editorconfig
+.eslintrc*
+.prettierrc*
+
+# Scripts de desarrollo
+scripts/
+docs/
+tmp_print.ps1

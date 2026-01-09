@@ -1,5 +1,5 @@
 'use server';
-import { supabaseAdmin } from "../src/lib/supabase";
+import { supabaseAdmin } from "../src/lib/supabaseServer";
 
 export async function createInitialAdminUser() {
   const { data, error } = await supabaseAdmin.auth.admin.createUser({

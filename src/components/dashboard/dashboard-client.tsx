@@ -14,7 +14,7 @@ export default function DashboardClient({
   products: Product[];
   sales: Sale[];
 }) {
-  const totalRevenue = sales.reduce((acc, sale) => acc + sale.amount, 0);
+  const totalRevenue = sales.reduce((acc, sale) => acc + sale.subtotal, 0);
   const totalSales = sales.length;
   const lowStockItems = products.filter((product) => product.stock < 10).length;
   const totalProducts = products.length;

@@ -90,7 +90,6 @@ export default function LoansClient({
   //      Estados locales
   const [loans, setLoans] = useState<Loan[]>(initialLoans);
   const [clients, setClients] = useState<Client[]>(initialClients);
-
   const [isNewLoanOpen, setNewLoanOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
   const [availableCapital, setAvailableCapital] = useState(0);
@@ -732,7 +731,17 @@ useEffect(() => {
                   <NewLoanForm
                     clients={clients}
                     onAddLoan={handleAddLoan}
-                    nextLoanNumber={`LP00${loans.length + 1}`}
+                    nextLoanNumber={(() => {
+                      const now = new Date();
+                      const yearMonth = now.getFullYear().toString() + (now.getMonth() + 1).toString().padStart(2, '0');
+                      const monthLoans = loans.filter(loan => {
+                        const loanDate = new Date(loan.loanDate);
+                        return loanDate.getFullYear() === now.getFullYear() && 
+                               loanDate.getMonth() === now.getMonth();
+                      });
+                      const sequence = (monthLoans.length + 1).toString().padStart(3, '0');
+                      return `LP-${yearMonth}-${sequence}`;
+                    })()}
                   />
                 </DialogContent>
               </Dialog>
@@ -769,7 +778,7 @@ useEffect(() => {
           ) : clientLoans.length === 0 ? (
             <div className="flex h-64 flex-col items-center justify-center text-center text-muted-foreground">
               <User className="h-12 w-12" />
-              <p className="mt-4">Este cliente no tiene PrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©stamos activos.</p>
+              <p className="mt-4">Este cliente no tiene Prestamos activos.</p>
             </div>
           ) : (
             <Accordion type="single" collapsible className="w-full">
@@ -858,7 +867,7 @@ useEffect(() => {
                       <TableHeader>
                         <TableRow>
                           <TableHead>#</TableHead>
-                          <TableHead>Fecha LÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­mite</TableHead>
+                          <TableHead>Fecha Limite</TableHead>
                           <TableHead>Capital</TableHead>
                           <TableHead>Intereses</TableHead>
                           <TableHead>Abonado</TableHead>
@@ -873,9 +882,15 @@ useEffect(() => {
 
                             {/*     FIXED: mostrar fecha local segura */}
                             <TableCell>
-                              {inst.dueDate
-                                ? new Date(inst.dueDate).toLocaleDateString('es-DO')
-                                : '   '}
+                              {(() => {
+                                const date = inst.dueDate || inst.due_date;
+                                if (!date) return '   ';
+                                try {
+                                  return new Date(date).toLocaleDateString('es-DO');
+                                } catch {
+                                  return date; // Si no se puede parsear, mostrar raw
+                                }
+                              })()}
                             </TableCell>
 
                             <TableCell>

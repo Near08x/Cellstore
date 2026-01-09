@@ -1,7 +1,7 @@
 import MainLayout from '@/components/main-layout';
 import PosClient from '@/components/pos/pos-client';
 import type { Product } from '@/lib/types';
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseServer";
 
 // 🔹 Obtener productos desde Supabase
 async function getProducts(): Promise<Product[]> {

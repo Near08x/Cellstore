@@ -1,8 +1,10 @@
-'use server'
 
 import { NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabaseServer'
 import type { Product } from '@/lib/types'
+import { apiHandler, ApiError } from '@/lib/api-handler'
+import { createProductSchema, updateProductSchema } from '@/schemas'
+import { logger } from '@/lib/logger'
 
 // GET: obtener todos los productos
 export async function GET() {
@@ -25,50 +27,48 @@ export async function GET() {
 }
 
 // POST: crear producto
-export async function POST(request: Request) {
-  try {
-    const product = (await request.json()) as Omit<Product, 'id'>
+export const POST = apiHandler(async (request) => {
+  const body = await request.json()
+  const product = createProductSchema.parse(body)
 
-    const { data, error } = await supabase
-      .from('products')
-      .insert(product)
-      .select()
-      .single()
+  logger.info('Creating product', { name: product.name })
 
-    if (error) throw error
+  const { data, error } = await supabase
+    .from('products')
+    .insert(product)
+    .select()
+    .single()
 
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Error creating product:', error)
-    return NextResponse.json(
-      { message: 'Error creating product', error },
-      { status: 500 }
-    )
+  if (error) {
+    logger.error('Error creating product', { error })
+    throw new ApiError('Error creating product', 500)
   }
-}
+
+  logger.info('Product created successfully', { id: data.id })
+  return NextResponse.json(data)
+})
 
 // PUT: actualizar producto
-export async function PUT(request: Request) {
-  try {
-    const product = (await request.json()) as Product
-    const { id, ...productData } = product
+export const PUT = apiHandler(async (request) => {
+  const body = await request.json()
+  const product = updateProductSchema.parse(body)
+  const { id, ...productData } = product
 
-    const { error } = await supabase
-      .from('products')
-      .update(productData)
-      .eq('id', id)
+  logger.info('Updating product', { id })
 
-    if (error) throw error
+  const { error } = await supabase
+    .from('products')
+    .update(productData)
+    .eq('id', id)
 
-    return NextResponse.json(product)
-  } catch (error) {
-    console.error('Error updating product:', error)
-    return NextResponse.json(
-      { message: 'Error updating product', error },
-      { status: 500 }
-    )
+  if (error) {
+    logger.error('Error updating product', { error, id })
+    throw new ApiError('Error updating product', 500)
   }
-}
+
+  logger.info('Product updated successfully', { id })
+  return NextResponse.json(product)
+})
 
 // DELETE: eliminar producto
 export async function DELETE(request: Request) {

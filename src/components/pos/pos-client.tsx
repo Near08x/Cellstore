@@ -63,7 +63,6 @@ export type SaleDetails = {
   id: string;
   cart: CartItem[];
   subtotal: number;
-  tax: number;
   total: number;
   paymentMethod: PaymentMethod;
   amountPaid: number;
@@ -144,6 +143,38 @@ export default function PosClient({ products }: { products: Product[] }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [isAddClientOpen, setAddClientOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Función para refrescar productos manualmente
+  const refreshProducts = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await fetch('/api/products');
+      if (response.ok) {
+        const refreshedProducts: Product[] = await response.json();
+        setLocalProducts(refreshedProducts);
+        toast({
+          title: 'Actualizado',
+          description: 'Lista de productos actualizada correctamente.',
+        });
+      }
+    } catch (error) {
+      console.error('Error al refrescar productos:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar la lista de productos.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Refrescar productos automáticamente cada 5 minutos
+  useEffect(() => {
+    const interval = setInterval(refreshProducts, 300000); // 300000ms = 5 minutos
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const fetchClients = async () => {
@@ -233,13 +264,12 @@ export default function PosClient({ products }: { products: Product[] }) {
     );
   };
 
-  const subtotal = cart.reduce((acc, item) => {
+  const total = cart.reduce((acc, item) => {
     const itemTotal = item.selectedPrice * item.quantity;
     const discountAmount = itemTotal * (item.discount / 100);
     return acc + itemTotal - discountAmount;
   }, 0);
-  const tax = subtotal * 0.18;
-  const total = subtotal + tax;
+  const subtotal = total; // El subtotal es igual al total ya que incluye impuestos
   const change = amountPaid - total;
 
   const handleOpenPaymentModal = () => {
@@ -328,7 +358,6 @@ const handlePrint = () => {
           id: newSale.id,
           cart,
           subtotal,
-          tax,
           total,
           paymentMethod,
           amountPaid,
@@ -393,12 +422,35 @@ const handlePrint = () => {
           <CardHeader>
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar productos para añadir al carrito..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-lg bg-background pl-8"
-              />
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Buscar productos para añadir al carrito..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full rounded-lg bg-background pl-8"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={refreshProducts}
+                  disabled={isRefreshing}
+                >
+                  <svg
+                    className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </Button>
+              </div>
               {searchQuery && (
                 <Button
                   variant="ghost"
@@ -569,14 +621,7 @@ const handlePrint = () => {
             )}
             <Separator />
             <div className="space-y-2">
-              <div className="flex justify-between">
-                <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Impuesto (18%)</span>
-                <span>${tax.toFixed(2)}</span>
-              </div>
+
               <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span>${total.toFixed(2)}</span>

@@ -96,56 +96,76 @@ export const sales: Sale[] = [
     id: 'sale1',
     customerName: 'Olivia Martin',
     customerEmail: 'olivia.martin@email.com',
+    subtotal: 1299.99,
     amount: 1299.99,
+    tax: Number((1299.99 - (1299.99 / 1.18)).toFixed(2)),
     date: '2024-05-23',
-    items: [{ productId: 'p1', quantity: 1, unitPrice: 1299.99, total: 1299.99 }],
+    items: [{ productId: 'p1', quantity: 1, unitPrice: 1299.99, price: 1299.99, total: 1299.99 }],
   },
   {
     id: 'sale2',
     customerName: 'Jackson Lee',
     customerEmail: 'jackson.lee@email.com',
+    subtotal: 999.99,
     amount: 999.99,
+    tax: Number((999.99 - (999.99 / 1.18)).toFixed(2)),
     date: '2024-05-15',
-    items: [{ productId: 'p2', quantity: 1, unitPrice: 999.99, total: 999.99 }],
+    items: [{ productId: 'p2', quantity: 1, unitPrice: 999.99, price: 999.99, total: 999.99 }],
   },
   {
     id: 'sale3',
     customerName: 'Isabella Nguyen',
     customerEmail: 'isabella.nguyen@email.com',
+    subtotal: 429.0,
     amount: 429.0,
+    tax: Number((429.0 - (429.0 / 1.18)).toFixed(2)),
     date: '2024-05-05',
-    items: [{ productId: 'p6', quantity: 1, unitPrice: 429.0, total: 429.0 }],
+    items: [{ productId: 'p6', quantity: 1, unitPrice: 429.0, price: 429.0, total: 429.0 }],
   },
   {
     id: 'sale4',
     customerName: 'William Kim',
     customerEmail: 'will@email.com',
+    subtotal: 1799.99,
     amount: 1799.99,
+    tax: Number((1799.99 - (1799.99 / 1.18)).toFixed(2)),
     date: '2024-04-28',
-    items: [{ productId: 'p5', quantity: 1, unitPrice: 1799.99, total: 1799.99 }],
+    items: [{ productId: 'p5', quantity: 1, unitPrice: 1799.99, price: 1799.99, total: 1799.99 }],
   },
   {
     id: 'sale5',
     customerName: 'Sofia Davis',
     customerEmail: 'sofia.davis@email.com',
+    subtotal: 1798.0,
     amount: 1798.0,
+    tax: Number((1798.0 - (1798.0 / 1.18)).toFixed(2)),
     date: '2024-04-12',
-    items: [{ productId: 'p3', quantity: 2, unitPrice: 899.0, total: 1798.0 }],
+    items: [{ productId: 'p3', quantity: 2, unitPrice: 899.0, price: 899.0, total: 1798.0 }],
   },
   {
     id: 'sale6',
     customerName: 'Olivia Martin',
     customerEmail: 'olivia.martin@email.com',
+    subtotal: 1428.99,
     amount: 1428.99,
+    tax: Number((1428.99 - (1428.99 / 1.18)).toFixed(2)),
     date: '2024-04-28',
-    items: [{ productId: 'p2', quantity: 1, unitPrice: 999.99, total: 999.99 }, { productId: 'p6', quantity: 1, unitPrice: 429.0, total: 429.0 }],
+    items: [
+      { productId: 'p2', quantity: 1, unitPrice: 999.99, price: 999.99, total: 999.99 },
+      { productId: 'p6', quantity: 1, unitPrice: 429.0, price: 429.0, total: 429.0 },
+    ],
   },
 ];
 
 export const clients: Client[] = [
-  ...new Map(sales.map((sale) => [sale.customerEmail, {name: sale.customerName, email: sale.customerEmail, phone: '555-0101'}])).values(),
-  {name: 'Liam Johnson', email: 'liam.j@email.com', phone: '555-0102'},
-  {name: 'Ava Brown', email: 'ava.b@email.com', phone: '555-0103'},
+  ...new Map(
+    sales.map((sale) => [
+      sale.customerEmail,
+      { id: sale.customerEmail, name: sale.customerName, email: sale.customerEmail, phone: '555-0101' },
+    ])
+  ).values(),
+  { id: 'liam.j@email.com', name: 'Liam Johnson', email: 'liam.j@email.com', phone: '555-0102' },
+  { id: 'ava.b@email.com', name: 'Ava Brown', email: 'ava.b@email.com', phone: '555-0103' },
 ];
 
 const generateLoan = (id: string, customerName: string, amount: number, date: string, term: number, interestRate: number, type: 'simple' | 'amortization', status: 'paid' | 'late' | 'current'): Loan => {
@@ -168,17 +188,18 @@ const generateLoan = (id: string, customerName: string, amount: number, date: st
       amountToPay += principalPayment + interest;
       const isPaid = status === 'paid' || (status === 'current' && i < term / 2);
       if(isPaid) amountApplied += principalPayment + interest;
-
+      const dueISO = dueDate.toISOString().split('T')[0];
       installments.push({
-        id: `inst-${id}-${i}`,
+        id: i,
         installmentNumber: i,
-        principal: principalPayment,
-        interest,
+        principal_amount: principalPayment,
+        interest_amount: interest,
         paidAmount: isPaid ? principalPayment + interest : 0,
-        date: isPaid ? dueDate.toISOString().split('T')[0] : '',
+        payment_date: isPaid ? dueISO : null,
         status: isPaid ? 'Pagado' : 'Pendiente',
         lateFee: 0,
-        dueDate: dueDate.toISOString().split('T')[0],
+        due_date: dueISO,
+        dueDate: dueISO,
       });
     }
   } else { // simple
@@ -192,16 +213,18 @@ const generateLoan = (id: string, customerName: string, amount: number, date: st
       const isPaid = status === 'paid' || (status === 'current' && i < term / 2);
       if(isPaid) amountApplied += principalPayment + interestPayment;
 
+      const dueISO = dueDate.toISOString().split('T')[0];
       installments.push({
-        id: `inst-${id}-${i}`,
+        id: i,
         installmentNumber: i,
-        principal: principalPayment,
-        interest: interestPayment,
+        principal_amount: principalPayment,
+        interest_amount: interestPayment,
         paidAmount: isPaid ? principalPayment + interestPayment : 0,
-        date: isPaid ? dueDate.toISOString().split('T')[0] : '',
+        payment_date: isPaid ? dueISO : null,
         status: isPaid ? 'Pagado' : 'Pendiente',
         lateFee: 0,
-        dueDate: dueDate.toISOString().split('T')[0],
+        due_date: dueISO,
+        dueDate: dueISO,
       });
     }
   }
@@ -221,22 +244,29 @@ const generateLoan = (id: string, customerName: string, amount: number, date: st
   return {
     id: `loan${id}`,
     loanNumber,
-    paymentType: 'mensual',
     invoiceNumber: `INV-${id}`,
     loanDate: date,
+    startDate: date,
+    start_date: date,
+    dueDate: installments[installments.length - 1].dueDate,
+    due_date: installments[installments.length - 1].due_date,
+    client_name: customerName,
     customerName,
-    amount,
+    principal: amount,
+    amount: amount,
     interestRate,
     loanTerm: term,
     loanType: type,
     cashier: 'Admin',
     amountToPay,
     amountApplied,
-    overdueAmount: status === 'late' ? installments.find(i => i.status === 'Atrasado')?.principal || 0 : 0,
-    lateFee: installments.reduce((acc, i) => acc + i.lateFee, 0),
+    overdueAmount: status === 'late' ? installments.find(i => i.status === 'Atrasado')?.principal_amount || 0 : 0,
+    lateFee: installments.reduce((acc, i) => acc + (i.lateFee || 0), 0),
     change: 0,
     totalPending,
     installments,
+    paymentType: type === 'simple' ? 'Simple' : 'Amortización',
+    status: status === 'paid' ? 'Pagado' : status === 'late' ? 'Pendiente' : 'Pendiente'
   };
 };
 

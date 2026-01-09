@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 import { Search, Trash2, UserPlus } from 'lucide-react';
 
 import {
@@ -49,6 +50,50 @@ export default function ClientsClient({ initialClients, sales }: { initialClient
   const [clients, setClients] = useState<Client[]>(initialClients);
   const { toast } = useToast();
 
+  useEffect(() => {
+    // Subscribe to changes in the clients table
+    const clientsSubscription = supabase
+      .channel('clients-changes')
+      .on('postgres_changes', 
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'clients' 
+        }, 
+        async (payload) => {
+          // On INSERT, add the new client to state
+          if (payload.eventType === 'INSERT') {
+            const newClient = payload.new as Client;
+            if (!clients.some(c => c.id === newClient.id)) {
+              setClients(prev => [newClient, ...prev]);
+            }
+          }
+          // On DELETE, remove the client from state
+          else if (payload.eventType === 'DELETE') {
+            const deletedClientId = payload.old.id;
+            setClients(prev => prev.filter(client => client.id !== deletedClientId));
+          }
+          // On UPDATE, update the client in state
+          else if (payload.eventType === 'UPDATE') {
+            const updatedClient = payload.new as Client;
+            setClients(prev => prev.map(client => 
+              client.id === updatedClient.id ? updatedClient : client
+            ));
+          }
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      clientsSubscription.unsubscribe();
+    };
+  }, []);
+
+  // Initialize clients state when initialClients prop changes
+  useEffect(() => {
+    setClients(initialClients);
+  }, [initialClients]);
 
   const handleAddClient = async (newClientData: Omit<Client, 'id'>) => {
     try {
