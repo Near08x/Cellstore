@@ -1,0 +1,88 @@
+{
+  "name": "Tutorial - Consultar Préstamos Pendientes",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "c7d7e8e5-4c3a-4b6f-8d9e-1a2b3c4d5e6f",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://ycvksxpxgykwfvauyjnt.supabase.co/rest/v1/loans",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "eq.Pendiente"
+            },
+            {
+              "name": "select",
+              "value": "id,loan_number,client_name,amount,amount_to_pay,total_pending"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b6c5d4e3-2a1b-4c5d-6e7f-8a9b0c1d2e3f",
+      "name": "Obtener Préstamos Pendientes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [470, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "1",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Procesar datos de préstamos\nconst prestamos = $input.all();\n\n// Calcular totales\nconst totalPrestamos = prestamos.length;\nconst montoTotal = prestamos.reduce((sum, item) => {\n  return sum + (item.json.total_pending || 0);\n}, 0);\n\nconst montoPromedio = totalPrestamos > 0 ? montoTotal / totalPrestamos : 0;\n\n// Formatear resultado\nreturn {\n  json: {\n    resumen: {\n      total_prestamos: totalPrestamos,\n      monto_total_pendiente: montoTotal,\n      monto_promedio: montoPromedio.toFixed(2)\n    },\n    prestamos: prestamos.map(p => ({\n      numero: p.json.loan_number,\n      cliente: p.json.client_name,\n      monto: p.json.amount,\n      pendiente: p.json.total_pending\n    }))\n  }\n};"
+      },
+      "id": "a5b4c3d2-1e0f-4a5b-6c7d-8e9f0a1b2c3d",
+      "name": "Procesar y Formatear",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [690, 300]
+    }
+  ],
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Obtener Préstamos Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Préstamos Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Procesar y Formatear",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-01-01T18:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,11 @@
+# Ignore files for Vercel
+node_modules
+.next
+.git
+yarn.lock
+.env*.local
+coverage
+build-log.txt
+build2.log
+test-output.txt
+*.log
